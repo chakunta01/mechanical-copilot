@@ -1,0 +1,61 @@
+{
+  "description": "Golden retrieval cases for the eval harness. Each case lists the documents a correct retrieval result must surface. Expected titles refer to the seeded demo corpus; add real plant cases alongside these (see docs/HANDOFF.md).",
+  "cases": [
+    {
+      "id": "mill-cutting-params-steel",
+      "query": "spindle speed and feed rate for roughing steel on the milling machine",
+      "doc_types": ["sop", "routing", "standard", "lesson"],
+      "expected_refs": ["SOP-MILL-001"],
+      "ks": [1, 3, 5]
+    },
+    {
+      "id": "turning-rpm-titanium",
+      "query": "maximum spindle rpm for carbide tool turning titanium",
+      "doc_types": ["sop", "routing", "standard", "lesson"],
+      "expected_refs": ["SOP-LATHE-002", "LL-019"],
+      "ks": [1, 3, 5]
+    },
+    {
+      "id": "fixture-torque-check",
+      "query": "verify fixture torque before starting the milling cycle",
+      "doc_types": ["sop", "routing", "standard", "lesson"],
+      "expected_refs": ["SOP-MILL-001"],
+      "ks": [1, 3, 5]
+    },
+    {
+      "id": "shaft-routing-operations",
+      "query": "operation sequence turning grinding inspection for the shaft bearing seats",
+      "doc_types": ["routing", "sop", "standard"],
+      "expected_refs": ["RT-RF100", "CP-350"],
+      "ks": [1, 3, 5]
+    },
+    {
+      "id": "visual-defect-acceptance",
+      "query": "visual acceptance criteria scratches burrs surface quality inspection",
+      "doc_types": ["standard", "sop", "lesson"],
+      "expected_refs": ["QS-77"],
+      "ks": [1, 3, 5]
+    },
+    {
+      "id": "titanium-fire-safety",
+      "query": "titanium chip fire hazard prevention coolant tool wear",
+      "doc_types": ["lesson", "sop"],
+      "expected_refs": ["LL-019"],
+      "ks": [1, 3, 5]
+    },
+    {
+      "id": "control-plan-frequencies",
+      "query": "shaft bearing seat inspection characteristic micrometer frequency control plan",
+      "doc_types": ["qa", "sop", "standard"],
+      "expected_refs": ["CP-350"],
+      "ks": [1, 3]
+    },
+    {
+      "id": "surface-finish-requirement",
+      "query": "surface finish Ra requirement on sealing faces profilometer",
+      "doc_types": ["sop", "standard"],
+      "expected_refs": ["SOP-MILL-001", "CP-350"],
+      "ks": [1, 3, 5]
+    }
+  ]
+}

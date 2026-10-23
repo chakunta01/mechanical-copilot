@@ -34,6 +34,10 @@ backend/data/
 logs/
 *.log.*
 
+
+# Generated eval output (input files: golden_retrieval.json, images/, rubric.json)
+data/eval/last_report.json
+
 # Reportlab temp install used by scripts/make_report.py (regenerated on demand)
 backend/.reportlab_tmp/
 
