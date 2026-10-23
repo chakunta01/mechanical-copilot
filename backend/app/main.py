@@ -10,12 +10,12 @@ from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from starlette.responses import Response
 
+from app.api.routes import auth, documents, inspections, misc, plans
 from app.core.config import settings
 from app.core.db import engine
 from app.core.errors import install_error_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RateLimitMiddleware, RequestContextMiddleware
-from app.api.routes import auth, documents, inspections, misc, plans
 
 configure_logging(settings.log_level)
 logger = get_logger("main")

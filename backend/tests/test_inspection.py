@@ -1,9 +1,7 @@
 """Inspection pipeline tests: quality gate + FakeLLM analysis + disposition."""
 
-import io
 
 import numpy as np
-from PIL import Image
 
 
 def _jpeg(w: int = 960, h: int = 720, brightness: int = 110, features: bool = True) -> bytes:

@@ -9,10 +9,9 @@ Features:
 
 from __future__ import annotations
 
-import base64
 import json
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -22,6 +21,8 @@ from app.core.errors import UpstreamError
 from app.core.logging import get_logger
 
 logger = get_logger("llm")
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class LLMResponse(BaseModel):
@@ -49,12 +50,12 @@ class BaseLLM(ABC):
     def complete_json(
         self,
         messages: list[dict[str, Any]],
-        schema: type[BaseModel],
+        schema: type[T],
         *,
         temperature: float | None = None,
         max_tokens: int | None = None,
         max_repairs: int = 1,
-    ) -> tuple[BaseModel, LLMResponse]:
+    ) -> tuple[T, LLMResponse]:
         """Ask for JSON, validate against `schema`, and retry once with the validator's
         complaints fed back to the model. Returns (validated_model, raw_response)."""
         convo = list(messages)
@@ -74,12 +75,11 @@ class BaseLLM(ABC):
                     convo[-1] = {**convo[-1], "content": [*content, {"type": "text", "text": schema_hint}]}
                 else:
                     convo[-1] = {**convo[-1], "content": f"{content}\n\n{schema_hint}"}
-        except Exception:  # schema hint is best-effort; never block generation
-            pass
-        last_resp: LLMResponse | None = None
+        except Exception:  # schema hint is best-effort; log and never block generation
+            logger.debug("Could not attach schema hint to final user message", exc_info=True)
         last_err: str = ""
 
-        for attempt in range(1 + max_repairs):
+        for _attempt in range(1 + max_repairs):
             resp = self.complete(
                 convo,
                 temperature=temperature,
@@ -89,7 +89,6 @@ class BaseLLM(ABC):
                     "json_schema": {"name": schema.__name__, "schema": schema.model_json_schema()},
                 },
             )
-            last_resp = resp
             parsed = _extract_json(resp.content)
             if parsed is not None:
                 try:

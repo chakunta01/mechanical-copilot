@@ -61,7 +61,7 @@ def chunk_text(
         current: list[str] = []
         size = 0
 
-        def flush(cur: list[str]) -> None:
+        def flush(cur: list[str], heading: str) -> None:
             nonlocal ordinal
             chunk_body = "\n\n".join(cur).strip()
             if not chunk_body:
@@ -82,24 +82,25 @@ def chunk_text(
             while len(para) > max_chars:
                 head, para = para[:max_chars], para[max_chars - overlap_chars :]
                 current.append(head)
-                flush(current)
+                flush(current, heading)
                 current = []
                 size = 0
             if size + len(para) > target_chars and current:
-                flush(current)
+                flush(current, heading)
                 tail = current[-1][-overlap_chars:] if overlap_chars else ""
                 current = [tail] if tail else []
                 size = len(current[0]) if current else 0
             current.append(para)
             size += len(para)
-        flush(current)
+        flush(current, heading)
 
     return chunks
 
 
 def extract_text_from_pdf(data: bytes) -> str:
-    from pypdf import PdfReader
     from io import BytesIO
+
+    from pypdf import PdfReader
 
     reader = PdfReader(BytesIO(data))
     return "\n\n".join(page.extract_text() or "" for page in reader.pages)

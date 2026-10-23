@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from sqlalchemy import func, select
 
-from app.api.deps import AdminUser, CurrentUser, DbSession, EngineerUser
+from app.api.deps import AdminUser, CurrentUser, DbSession
 from app.core.errors import Forbidden, NotFound
 from app.models import (
     Approval,
@@ -27,6 +27,7 @@ from app.schemas import (
     FeedbackOutList,
     QaAnswer,
     QaAskIn,
+    QaThreadOut,
     QaThreadsOut,
     UserOut,
     UsersOut,
@@ -98,7 +99,7 @@ def qa_threads(user: CurrentUser, db: DbSession) -> QaThreadsOut:
                 ],
             }
         )
-    return QaThreadsOut(items=out)
+    return QaThreadsOut(items=[QaThreadOut.model_validate(d) for d in out])
 
 
 # -------------------------------- Dashboard -------------------------------- #
@@ -162,14 +163,14 @@ def audit_tail(user: AdminUser, db: DbSession, limit: int = 100) -> list[dict]:
     logs = db.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(min(limit, 500))).all()
     return [
         {
-            "id": l.id,
-            "request_id": l.request_id,
-            "actor_id": l.actor_id,
-            "action": l.action,
-            "target_type": l.target_type,
-            "target_id": l.target_id,
-            "detail": l.detail,
-            "created_at": l.created_at,
+            "id": entry.id,
+            "request_id": entry.request_id,
+            "actor_id": entry.actor_id,
+            "action": entry.action,
+            "target_type": entry.target_type,
+            "target_id": entry.target_id,
+            "detail": entry.detail,
+            "created_at": entry.created_at,
         }
-        for l in logs
+        for entry in logs
     ]

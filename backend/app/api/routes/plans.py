@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, EngineerUser
-from app.core.errors import Forbidden, NotFound, ValidationFailure
+from app.core.errors import NotFound, ValidationFailure
 from app.models import Approval, PlanStatus, ProcessPlan
 from app.schemas import (
     ApprovalOut,

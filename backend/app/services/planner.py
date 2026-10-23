@@ -23,12 +23,11 @@ from app.schemas import (
     Citation,
     GroundingReport,
     PlanGenerateIn,
-    RuleValidationReport,
 )
 from app.services import knowledge
 from app.services.llm import get_llm
-from app.services.rules import validate_plan
 from app.services.plan_schema import GeneratedPlan
+from app.services.rules import validate_plan
 
 logger = get_logger("planner")
 
@@ -110,7 +109,7 @@ def _attach_heuristic_citations(plan: GeneratedPlan, citations: list[dict]) -> i
     return filled
 
 
-def _attach_citations(plan: GeneratedPlan, citations: list[dict]) -> None:
+def _attach_citations(plan: GeneratedPlan, citations: list[dict]) -> int:
     """Distribute citation objects onto operations that referenced their [Kn] key."""
     total_ops = 0
     for op in plan.operations:
@@ -129,7 +128,7 @@ def _attach_citations(plan: GeneratedPlan, citations: list[dict]) -> None:
         op.citations = cited
         if cited:
             total_ops += 1
-    return total_ops  # type: ignore[return-value]
+    return total_ops
 
 
 def _unsupported_claim_scan(plan: GeneratedPlan, citations: list[dict]) -> list[str]:

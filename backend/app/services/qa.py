@@ -21,7 +21,7 @@ from app.core.config import settings
 from app.core.errors import NotFound, UpstreamError
 from app.core.logging import get_logger
 from app.models import QaMessage, QaThread
-from app.schemas import QaAnswer
+from app.schemas import Citation, QaAnswer
 from app.services import knowledge
 from app.services.llm import get_llm
 
@@ -78,7 +78,7 @@ def _refuse(
     return QaAnswer(
         thread_id=thread.id,
         answer=answer_text,
-        citations=citations,
+        citations=[Citation.model_validate(c) for c in citations],
         confidence=round(top_score, 4),
         refused=True,
         refusal_reason=reason,
@@ -195,7 +195,7 @@ def ask(db: Session, user_id: str, thread_id: str | None, question: str) -> QaAn
     return QaAnswer(
         thread_id=thread.id,
         answer=generated.answer,
-        citations=[dict(c) for c in citations],
+        citations=[Citation.model_validate(c) for c in citations],
         confidence=round(generated.confidence, 4),
         refused=False,
     )

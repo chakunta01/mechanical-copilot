@@ -80,7 +80,7 @@ class HashingEmbeddings(BaseEmbeddings):
     @staticmethod
     def _tokens(text: str) -> list[str]:
         toks = [t for t in _token_re.findall(text.lower()) if t not in _STOPWORDS and len(t) > 1]
-        bigrams = [f"{a}_{b}" for a, b in zip(toks, toks[1:])]
+        bigrams = [f"{a}_{b}" for a, b in zip(toks, toks[1:], strict=False)]
         return toks + bigrams
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -88,7 +88,8 @@ class HashingEmbeddings(BaseEmbeddings):
         for text in texts:
             v = [0.0] * self.dim
             for tok in self._tokens(text):
-                h = hashlib.md5(tok.encode("utf-8")).digest()
+                # Non-cryptographic feature hashing for the offline embedder, not a security use.
+                h = hashlib.md5(tok.encode("utf-8")).digest()  # noqa: S324
                 idx = int.from_bytes(h[:4], "little") % self.dim
                 sign = 1.0 if h[4] % 2 == 0 else -1.0
                 v[idx] += sign

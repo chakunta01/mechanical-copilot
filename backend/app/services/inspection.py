@@ -5,14 +5,12 @@ from __future__ import annotations
 import base64
 import io
 import uuid
-from pathlib import Path
 from typing import Any
-
-from sqlalchemy.orm import Session
 
 import cv2
 import numpy as np
 from PIL import Image
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import UnsupportedMediaType, ValidationFailure
@@ -20,8 +18,8 @@ from app.core.logging import get_logger
 from app.models import AuditLog, Inspection, InspectionStatus
 from app.schemas import Citation
 from app.services import knowledge
-from app.services.llm import get_llm
 from app.services.inspection_schema import GeneratedInspection
+from app.services.llm import get_llm
 
 logger = get_logger("inspection")
 

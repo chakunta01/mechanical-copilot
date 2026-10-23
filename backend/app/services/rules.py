@@ -60,8 +60,10 @@ def validate_plan(plan: dict[str, Any], requirements: dict[str, Any]) -> RuleVal
     nums = [op.get("op_number") for op in operations]
     if any(not isinstance(n, int) for n in nums):
         errors.append(ValidationIssue(rule_id="STRUCT_OP_NUM", severity="error", message="Operation numbers must be integers", field="operations"))
-    elif sorted(nums) != nums or len(set(nums)) != len(nums):
-        errors.append(ValidationIssue(rule_id="STRUCT_OP_ORDER", severity="error", message="Operation numbers must be strictly increasing and unique", field="operations"))
+    else:
+        int_nums = [n for n in nums if isinstance(n, int)]
+        if sorted(int_nums) != int_nums or len(set(int_nums)) != len(int_nums):
+            errors.append(ValidationIssue(rule_id="STRUCT_OP_ORDER", severity="error", message="Operation numbers must be strictly increasing and unique", field="operations"))
 
     for op in operations:
         name = op.get("name") or "unnamed"

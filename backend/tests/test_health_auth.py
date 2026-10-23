@@ -11,7 +11,7 @@ def test_health(client):
 
 def test_register_login_me(client):
     email = "auth_flow@example.com"
-    password = "strong-password-1"
+    password = "strong-password-1"  # noqa: S105 - test fixture, not a secret
 
     r = client.post("/api/v1/auth/register", json={"email": email, "password": password, "full_name": "A"})
     assert r.status_code == 201

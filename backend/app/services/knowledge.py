@@ -6,14 +6,12 @@ Retrieval: embed query -> vector search -> optional keyword boost -> Citation ob
 
 from __future__ import annotations
 
-from dataclasses import asdict
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
 from app.models import Chunk, Document, DocumentStatus
-from app.services.chunker import Chunk as ChunkData
+from app.schemas import Citation
 from app.services.chunker import chunk_text, extract_text_from_docx, extract_text_from_pdf
 from app.services.embeddings import get_embeddings
 from app.services.vector_store import VectorRecord, get_vector_store
@@ -154,9 +152,8 @@ def retrieve(
     min_score: float | None = None,
 ) -> list[dict]:
     """Retrieve cited chunks for a query. Returns citation-shaped dicts."""
-    from app.schemas import Citation
-
     from app.core.config import settings
+    from app.schemas import Citation
 
     top_k = top_k or settings.retrieval_top_k
     min_score = settings.retrieval_min_score if min_score is None else min_score

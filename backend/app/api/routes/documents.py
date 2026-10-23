@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 from app.api.deps import CurrentUser, DbSession, EngineerUser
 from app.core.config import settings
 from app.core.errors import NotFound, PayloadTooLarge, UnsupportedMediaType
-from app.models import AuditLog, Chunk, Document, DocumentStatus
-from app.schemas import DocumentIn, DocumentOut, DocumentsOut, SearchOut
+from app.models import AuditLog, Chunk, Document
+from app.schemas import Citation, DocumentIn, DocumentOut, DocumentsOut, SearchOut
 from app.services import knowledge
 
 router = APIRouter(prefix="/documents", tags=["knowledge"])
@@ -129,4 +129,4 @@ def search(payload: dict, user: CurrentUser, db: DbSession) -> SearchOut:
     if not question:
         raise NotFound("query required")
     citations = knowledge.retrieve(question, top_k=8)
-    return SearchOut(query=question, chunks=[dict(c) for c in citations])  # type: ignore[arg-type]
+    return SearchOut(query=question, chunks=[Citation.model_validate(c) for c in citations])

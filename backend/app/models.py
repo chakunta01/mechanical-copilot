@@ -59,7 +59,7 @@ class User(Base, TimestampMixin):
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.ENGINEER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    plans: Mapped[list["ProcessPlan"]] = relationship(back_populates="owner")
+    plans: Mapped[list[ProcessPlan]] = relationship(back_populates="owner")
 
 
 class RefreshToken(Base):
@@ -94,7 +94,7 @@ class Document(Base, TimestampMixin):
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[str] = mapped_column(String(32), default="system")
 
-    chunks: Mapped[list["Chunk"]] = relationship(back_populates="document", cascade="all,delete-orphan")
+    chunks: Mapped[list[Chunk]] = relationship(back_populates="document", cascade="all,delete-orphan")
 
 
 class Chunk(Base):
@@ -141,7 +141,7 @@ class ProcessPlan(Base, TimestampMixin):
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
 
     owner: Mapped[User] = relationship(back_populates="plans")
-    approvals: Mapped[list["Approval"]] = relationship(back_populates="plan", cascade="all,delete-orphan")
+    approvals: Mapped[list[Approval]] = relationship(back_populates="plan", cascade="all,delete-orphan")
 
 
 class Approval(Base):

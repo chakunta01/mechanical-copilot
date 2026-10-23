@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.core.errors import NotFound, PayloadTooLarge, UnsupportedMediaType
 from app.models import AuditLog, Inspection, InspectionStatus
 from app.schemas import DispositionIn, InspectionOut, InspectionsOut
-from app.services.inspection import analyze_image, ALLOWED_TYPES
+from app.services.inspection import ALLOWED_TYPES, analyze_image
 
 router = APIRouter(prefix="/inspections", tags=["inspection"])
 
