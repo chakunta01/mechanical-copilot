@@ -1,0 +1,14 @@
+# Plant glossary and terminology overrides for retrieval & prompts.
+glossary:
+  OD: "Outer Diameter"
+  ID: "Inner Diameter"
+  VMC: "Vertical Machining Center"
+  HMC: "Horizontal Machining Center"
+  CMM: "Coordinate Measuring Machine"
+  Ra: "Surface roughness average (micrometers)"
+  FAI: "First Article Inspection"
+  PPAP: "Production Part Approval Process"
+  SOP: "Standard Operating Procedure"
+  NCR: "Non-Conformance Report"
+  DFA: "Disposition: accept as-is"
+  RWK: "Disposition: rework"

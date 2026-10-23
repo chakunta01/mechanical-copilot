@@ -1,0 +1,44 @@
+# Development stack: backend + postgres. Frontend runs with `npm run dev` locally,
+# or use docker-compose.prod.yml for the full production topology.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: copilot
+      POSTGRES_PASSWORD: copilot
+      POSTGRES_DB: copilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U copilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://copilot:copilot@db:5432/copilot
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-hashing}
+      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
+      APP_ENV: dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/srv/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:

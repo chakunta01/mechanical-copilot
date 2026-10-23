@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data (DBs, uploads) — the published seed corpus and rule packs in
+# data/seed/ and data/rulepacks/ stay under version control
+backend/data/
+*.db
+*.sqlite3
+
+# Logs and scratch output (*_pull.log, ollama.log, backend.log, frontend.log, ...)
+*.log
+logs/
+*.log.*
+
+# Reportlab temp install used by scripts/make_report.py (regenerated on demand)
+backend/.reportlab_tmp/
+
+# Portable third-party tools (Ollama + models, tectonic binary)
+tools/ollama/
+tools/tectonic/
+
+# Freebuff workspace metadata
+.freebuff/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

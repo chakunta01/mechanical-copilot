@@ -1,0 +1,278 @@
+\documentclass[11pt,a4paper]{article}
+
+% ------------------------------------------------------------------
+% AI Manufacturing Copilot -- Concepts & Architecture Guide
+% Self-study document: every concept is explained in plain language
+% first, then connected to the exact code in this repository.
+% Compile:  pdflatex concepts_guide.tex   (twice, for the TOC)
+% ------------------------------------------------------------------
+
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\definecolor{layman}{RGB}{0,102,153}
+\definecolor{codebox}{RGB}{30,30,40}
+\definecolor{softgray}{RGB}{245,245,248}
+
+\newcommand{\layman}[1]{\par\medskip\noindent\textcolor{layman}{\textbf{In plain words:}} #1\par\smallskip}
+\newcommand{\codefile}[1]{\texttt{\small #1}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small AI Manufacturing Copilot -- Concepts Guide}
+\fancyhead[R]{\small\thepage}
+
+\title{\vspace{-1cm}\textbf{AI Copilot for Manufacturing Process Planning\\\& Quality Inspection}\\[4pt]
+\large Concepts, Architecture \& Flowcharts -- A Learning Guide}
+\author{Prepared as a self-study companion to the codebase}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+\noindent This guide explains \emph{every concept} used to build the AI Manufacturing
+Copilot -- retrieval-augmented generation (RAG), embeddings, vector search, structured
+LLM output, deterministic validation, vision inspection, human-in-the-loop workflows,
+JWT authentication, and more -- each in layman's terms first, then mapped to the actual
+files in this repository, with flowcharts. Read it end-to-end and you will understand
+not just \emph{what} the system does, but \emph{why} each piece exists and \emph{where}
+it lives in the code.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ==================================================================
+\section{The Big Picture: What Are We Building and Why?}
+% ==================================================================
+
+\subsection{The problem, in a story}
+Imagine a factory that makes precision shafts. When a customer orders 25 shafts of a new
+type, a senior process engineer must write a \textbf{process plan}: an ordered list of
+machining operations (turn, mill, drill, grind\dots), the machine and tools for each,
+cutting speeds, and the quality checks. This knowledge lives in the heads of a few
+veterans and in scattered PDFs -- SOPs, routing sheets, quality standards, past
+lessons-learned. Meanwhile, quality inspectors photograph parts and judge defects by
+eye, and their findings sit in a separate system nobody cross-references.
+
+\layman{The company's expertise is locked in silos: people, PDFs, and photos. New or
+busy engineers can't easily reuse it, and quality data never feeds back into planning.
+The result: slow planning, repeated mistakes, defects escaping to customers.}
+
+\subsection{The solution}
+Build a \textbf{copilot} (an assistant, not an autopilot) that:
+\begin{enumerate}[nosep]
+  \item \textbf{Reads the plant's knowledge} (SOPs, routings, standards, lessons) and
+        can answer questions about it \emph{with citations} -- this is RAG.
+  \item \textbf{Drafts process plans} from part requirements, grounded in that
+        knowledge, and \emph{validates them with deterministic rules}.
+  \item \textbf{Inspects part images} with a vision model, but only after the image
+        passes a strict quality gate.
+  \item \textbf{Never ships anything on its own} -- an engineer must approve every
+        plan and disposition every part, and every action is audit-logged.
+\end{enumerate}
+
+\subsection{System flowchart (the 10,000-meter view)}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=9mm and 11mm,
+  box/.style={draw, rounded corners, fill=softgray, minimum width=30mm, minimum height=11mm, align=center, font=\small},
+  store/.style={box, fill=blue!8},
+  human/.style={box, fill=orange!12},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick},
+  lab/.style={font=\scriptsize\itshape, text=black!60}
+]
+  \node[box] (kb) {Knowledge Base\\SOPs, routings, standards};
+  \node[store, right=of kb] (vs) {Vector Store\\(embeddings)};
+  \node[box, below=of kb] (req) {Part Requirements\\(form input)};
+  \node[box, right=of req] (llm) {LLM Planner\\(structured JSON)};
+  \node[box, right=of llm] (rules) {Rule Engine\\(deterministic)};
+  \node[human, right=of rules] (eng) {Engineer\\review \& approve};
+  \node[box, below=of req] (img) {Part Image\\(photo upload)};
+  \node[box, right=of img] (gate) {Quality Gate\\(blur/brightness)};
+  \node[box, right=of gate] (vlm) {VLM\\defect analysis};
+  \node[human, below=of eng] (insp) {Inspector\\disposition};
+  \node[store, below=of rules] (db) {Database\\plans, audits, feedback};
+
+  \draw[arrow] (kb) -- node[lab, above]{chunk+embed} (vs);
+  \draw[arrow] (vs) -- node[lab, right]{retrieve} (llm);
+  \draw[arrow] (req) -- (llm);
+  \draw[arrow] (llm) -- (rules);
+  \draw[arrow] (rules) -- node[lab, above]{draft + report} (eng);
+  \draw[arrow] (img) -- (gate);
+  \draw[arrow] (gate) -- node[lab, above]{if usable} (vlm);
+  \draw[arrow] (vlm) -| node[lab, near end, above]{verdict} (insp);
+  \draw[arrow] (eng) -- (db);
+  \draw[arrow] (insp) -- (db);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Where everything lives}
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Concern} & \textbf{Code} \\
+\midrule
+Settings (all knobs) & \codefile{backend/app/core/config.py} \\
+Database tables & \codefile{backend/app/models.py} \\
+API request/response shapes & \codefile{backend/app/schemas.py} \\
+Chunking & \codefile{backend/app/services/chunker.py} \\
+Embeddings (real + offline) & \codefile{backend/app/services/embeddings.py} \\
+Vector store & \codefile{backend/app/services/vector\_store.py} \\
+Retrieval + citations & \codefile{backend/app/services/knowledge.py} \\
+LLM gateway & \codefile{backend/app/services/llm.py} \\
+Plan generation & \codefile{backend/app/services/planner.py} \\
+Rule validation & \codefile{backend/app/services/rules.py} \\
+Image quality gate + VLM & \codefile{backend/app/services/inspection.py} \\
+Q\&A with refusal & \codefile{backend/app/services/qa.py} \\
+Auth + JWT & \codefile{backend/app/core/security.py}, \codefile{app/api/deps.py} \\
+API routes & \codefile{backend/app/api/routes/*.py} \\
+Frontend pages & \codefile{frontend/src/pages/*.tsx} \\
+Rule packs (editable by engineers) & \codefile{data/rulepacks/*.yaml} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ==================================================================
+\section{Retrieval-Augmented Generation (RAG)}
+% ==================================================================
+
+\subsection{The concept}
+An LLM is a brilliant intern with \emph{amnesia}: it read the whole internet during
+training, but it has never seen \emph{your} SOPs, and it will confidently make things
+up when unsure. \textbf{RAG} fixes this: \emph{before} asking the model to answer,
+you \emph{retrieve} relevant passages from your own documents and paste them into the
+prompt with one instruction: ``answer using ONLY these passages, and cite them.''
+
+\layman{Instead of asking a know-it-all stranger, you hand the expert the relevant
+manual pages \emph{open at the right page}, and ask them to answer while pointing at
+the page for every claim. If the answer isn't on those pages, they must say so.}
+
+\subsection{Why this kills hallucination (mostly)}
+\begin{itemize}[nosep]
+  \item The model isn't recalling -- it's \emph{reading}. Invention becomes unnecessary.
+  \item Every statement can be tied to a chunk ID the user can click and verify.
+  \item If retrieval finds nothing relevant, the system \emph{refuses} rather than
+        guesses (see \S\ref{sec:refusal}).
+\end{itemize}
+
+\subsection{The RAG pipeline in this codebase}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=7mm and 9mm,
+  stepbox/.style={draw, rounded corners, fill=softgray, minimum height=10mm, align=center, font=\small},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick}
+]
+  \node[stepbox] (doc) {Documents\\(SOPs, PDFs, text)};
+  \node[stepbox, right=of doc] (chunk) {Chunker\\split by sections};
+  \node[stepbox, right=of chunk] (emb) {Embedder\\text -> vector};
+  \node[stepbox, right=of emb] (store) {Vector Store\\save vectors};
+  \node[stepbox, below=of chunk] (query) {User Question};
+  \node[stepbox, right=of query] (qemb) {Embed\\question -> vector};
+  \node[stepbox, right=of qemb] (search) {Nearest Vectors\\(similarity)};
+  \node[stepbox, right=of search] (prompt) {Prompt\\question + passages};
+  \draw[arrow] (doc) -- (chunk);
+  \draw[arrow] (chunk) -- (emb);
+  \draw[arrow] (emb) -- (store);
+  \draw[arrow] (query) -- (qemb);
+  \draw[arrow] (qemb) -- (search);
+  \draw[arrow] (search) -- (prompt);
+\end{tikzpicture}
+\end{center}
+
+\textbf{Indexing path} (runs once per document):
+\codefile{knowledge.ingest\_document()} in \codefile{backend/app/services/knowledge.py}
+calls \codefile{chunker.chunk\_text()}, \codefile{embeddings.embed()}, and
+\codefile{vector\_store.upsert()}.
+
+\textbf{Query path} (runs per question): \codefile{knowledge.retrieve()} embeds the
+question, asks the store for nearest chunks, \textbf{blends} the similarity score with
+a keyword-overlap score (0.8/0.2), and returns \codefile{Citation} objects
+(document, version, section, score, snippet).
+
+\subsection{Chunking: why size matters}
+Embeddings turn a chunk into one vector -- so a chunk that mixes five topics becomes a
+mushy average. Our chunker (\codefile{services/chunker.py}) splits on \emph{headings}
+first (``SECTION 3: CUTTING PARAMETERS''), packs paragraphs up to $\approx$1200
+characters with 150 characters of overlap between consecutive chunks, and records the
+section name as metadata -- so citations can say ``SOP-MILL-001, Section 3.''
+
+\layman{Like filing: don't stuff the whole manual into one folder. Cut it at chapter
+boundaries so each folder is about one thing, and keep the chapter title on the tab.}
+
+% ==================================================================
+\section{Embeddings \& Vector Search}
+% ==================================================================
+
+\subsection{The concept}
+An \textbf{embedding} is a list of numbers (a vector) that represents a text's
+\emph{meaning}. Texts with similar meanings get vectors that point in similar
+directions. The similarity of two texts is the \textbf{cosine} of the angle between
+their vectors: 1.0 = identical meaning, 0.0 = unrelated.
+
+\layman{Think of a map where every sentence is a city. ``How fast can I mill steel?''
+and ``Roughing steel: 3000--5000 RPM'' are two streets in the same neighborhood;
+``Employee parking policy'' is in another state. We find answers by searching the
+neighborhood, not by reading every page.}
+
+\subsection{Two providers, one interface}
+\codefile{services/embeddings.py} defines an abstract
+\codefile{BaseEmbeddings} with two implementations:
+\begin{itemize}[nosep]
+  \item \textbf{OpenAICompatibleEmbeddings} -- calls any \codefile{/v1/embeddings}
+        endpoint (OpenAI, Azure, vLLM, Ollama). Production quality.
+  \item \textbf{HashingEmbeddings} -- a zero-dependency offline fallback: it hashes
+        each word/bigram into buckets to build a vector. It knows \emph{words}, not
+        \emph{meaning}. Used in dev/tests so the whole system runs with no API key.
+\end{itemize}
+
+\layman{The real model understands that ``RPM'' and ``spindle speed'' are related.
+The hashing fallback is a hyper-literal librarian: it only matches when you use the
+same words. Both plug into the same socket, so switching is one line in \codefile{.env}.}
+
+\subsection{Calibration: why we rescale hashing scores}
+Real semantic models give meaningful matches cosine scores like 0.4--0.8, and garbage
+around 0.1--0.2. Hashing vectors give meaningful matches around 0.25--0.33 and garbage
+0.10--0.15 -- a \emph{compressed band}. A fixed threshold like 0.25 would behave
+completely differently on the two providers. So in \codefile{knowledge.retrieve()} we
+rescale the hashing band onto [0,1] (a linear map, like converting Celsius to
+Fahrenheit), so one threshold works everywhere. The lesson generalizes: \textbf{when
+swapping models, recalibrate thresholds -- score scales are model-specific, not
+universal}.
+
+\subsection{Vector stores}
+\codefile{services/vector\_store.py} offers:
+\begin{itemize}[nosep]
+  \item \textbf{NumpyVectorStore} -- exact cosine search, in-memory, rebuilt from the
+        database at startup. Perfect for one server and a few thousand chunks.
+  \item \textbf{ChromaVectorStore} -- optional persistent ANN store
+        (\codefile{pip install .[chroma]}) for larger corpora.
+\end{itemize}
+Both implement \codefile{upsert / delete\_document / search / count} -- the rest of the
+system never knows which is running. \emph{Program to an interface} is the pattern.
+
+\subsection{Hybrid retrieval}
+Dense similarity misses exact keywords (``h6 tolerance''), and keyword matching misses
+paraphrases. We do both and blend: $\text{final} = 0.8 \times \text{dense} + 0.2
+\times \text{keyword overlap}$. This is called \textbf{hybrid search} and is what real
+production RAG systems do.
+
+\input{concepts_guide_sections/part2}
+
+\end{document}

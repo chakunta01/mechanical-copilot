@@ -1,0 +1,369 @@
+% ==================================================================
+% Part 2: LLMs, structured output, planning, rules, inspection,
+%         human-in-the-loop, security, deployment, glossary.
+% Included from concepts_guide.tex -- do not compile directly.
+% ==================================================================
+
+% ==================================================================
+\section{LLMs, Structured Output \& the Planner}
+% ==================================================================
+
+\subsection{The concept of an LLM gateway}
+Different providers (OpenAI, Azure, vLLM, Ollama) all speak a nearly identical
+``chat completions'' dialect. \codefile{services/llm.py} wraps that dialect behind one
+interface, so the planner/Q\&A/inspection code never says ``OpenAI'' -- it says
+``\codefile{llm.complete\_json(...)}''. Swapping providers is a \codefile{.env} edit,
+not a code edit.
+
+\subsection{Structured output: the single most important LLM trick}
+A plan must be \emph{data} (operations, machines, parameters), not an essay -- data can
+be validated, stored, versioned, and shown in a UI. The trick:
+\begin{enumerate}[nosep]
+  \item Define a Pydantic schema (\codefile{services/plan\_schema.py}):
+        \codefile{GeneratedPlan} with \codefile{operations[]}, each having
+        \codefile{op\_number, machine, tooling, parameters\dots}.
+  \item Instruct the model: ``Output ONLY JSON matching this shape.''
+  \item Parse the reply, extract the JSON (even from markdown fences),
+        \emph{validate against the schema}.
+  \item If validation fails, send the errors back: ``Your JSON failed validation
+        because X. Return corrected JSON only.'' (One bounded retry.)
+\end{enumerate}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=6mm and 8mm,
+  stepbox/.style={draw, rounded corners, fill=softgray, minimum height=10mm, align=center, font=\small},
+  err/.style={stepbox, fill=red!8},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick}
+]
+  \node[stepbox] (ask) {Ask LLM\\for JSON};
+  \node[stepbox, right=of ask] (parse) {Parse JSON};
+  \node[stepbox, right=of parse] (val) {Validate\\(Pydantic)};
+  \node[stepbox, right=of val, fill=green!10] (ok) {Use the data};
+  \node[err, below=of val] (retry) {Re-ask with\\validator errors};
+  \draw[arrow] (ask) -- (parse);
+  \draw[arrow] (parse) -- (val);
+  \draw[arrow] (val) -- (ok);
+  \draw[arrow] (val) -- node[right]{invalid} (retry);
+  \draw[arrow] (retry) -| node[below]{1 bounded retry} (ask);
+\end{tikzpicture}
+\end{center}
+
+\layman{It's a tax form. You don't accept a free-text letter; you reject the form,
+circle the wrong fields, and hand it back once. After one retry you escalate to a
+human. This converts ``the model said something'' into ``the data passed the schema.''}
+This loop lives in \codefile{llm.complete\_json()}.
+
+\subsection{The planner pipeline}
+\codefile{services/planner.py} orchestrates five steps:
+\begin{enumerate}[nosep]
+  \item \textbf{Retrieve} knowledge for the part (SOPs, routings, standards, lessons)
+        $\rightarrow$ numbered context blocks \codefile{[K1]..[Kn]}.
+  \item \textbf{Prompt} the LLM: requirements + context + ``cite the [Kn] you use.''
+  \item \textbf{Structured generation} via \codefile{complete\_json}.
+  \item \textbf{Rule validation} (\S\ref{sec:rules}); if errors, one repair round with
+        the rule violations fed back to the model.
+  \item \textbf{Grounding report}: count operations carrying citations; scan for
+        numeric specs (``0.1 mm'', ``1800 RPM'') that appear in \emph{no} retrieved
+        chunk $\rightarrow$ flagged as \textbf{unverified claims} shown to the engineer.
+\end{enumerate}
+
+\subsection{The refusal gate: when the assistant says ``I don't know''}
+\label{sec:refusal}
+The Q\&A endpoint refuses to answer when retrieval shows nothing relevant. Two checks
+(\codefile{services/qa.py}):
+\begin{enumerate}[nosep]
+  \item \textbf{Absolute floor}: the best chunk's calibrated score is below a
+        threshold -- nothing even came close.
+  \item \textbf{Separation}: compare the best chunk's score to the \emph{average}
+        score across the whole corpus for this query. A question the corpus can
+        answer produces one neighborhood clearly above the background (separation
+        $\gg 1$); a question about nothing in the corpus scores uniformly -- nothing
+        stands out (separation $\approx 1$) $\Rightarrow$ refuse.
+\end{enumerate}
+\layman{Before answering, the assistant glances at the whole library: if one book
+lights up for this question, answer from it; if everything is equally dim, say
+``this isn't in the library'' instead of improvising. That self-comparison makes the
+threshold work for \emph{any} embedding model without manual tuning.}
+
+\subsection{The offline FakeLLM}
+\codefile{FakeLLM} returns deterministic canned JSON (plan, inspection, or Q\&A,
+routed by prompt markers). This is not a toy: it makes the \emph{entire product} --
+auth, RAG, planning, validation, approval, UI -- testable and demonstrable with zero
+API cost, and makes the 29 automated tests hermetic (no network flakiness).
+
+% ==================================================================
+\section{Deterministic Validation: The Rule Engine}\label{sec:rules}
+% ==================================================================
+
+\subsection{The concept}
+LLMs propose; rules dispose. After generation, plain Python code re-checks the plan
+against plant master data. No probability involved -- the same input always yields the
+same verdict. This is how you get \emph{auditability}: ``why was this plan rejected?''
+has a precise answer: ``rule MACH\_FORBIDDEN: milling is not allowed on CNC Lathe-1.''
+
+\layman{The AI is a talented intern writing the plan; the rule engine is the grumpy
+but reliable inspector with the checklist who stamps it. Interns get better with
+feedback; the checklist never gets tired or creative.}
+
+\subsection{What the rules check}
+Rules live in \textbf{YAML} (\codefile{data/rulepacks/shop\_rules.yaml}) so process
+engineers can edit them \emph{without touching code}:
+\begin{itemize}[nosep]
+  \item \textbf{Structural}: op numbers strictly increasing, every op has a machine,
+        an inspection plan exists, checkpoints present (warnings).
+  \item \textbf{Machine capability}: machine must exist in approved master data
+        (\codefile{MACH\_UNKNOWN}); process must be permitted there
+        (\codefile{MACH\_FORBIDDEN}); parameters within the approved list.
+  \item \textbf{Material}: forbidden processes per material; required notes
+        (``material certification'') present -- else warning.
+  \item \textbf{Quantity policy}: orders $\leq$10 pcs require 100\% visual inspection
+        in the plan (\codefile{QTY\_INSPECT}).
+\end{itemize}
+
+\subsection{The repair loop}
+If errors exist, the planner sends them back to the LLM once: ``fix these rule
+violations and return the full corrected JSON.'' If it still fails, the plan is saved
+\emph{with its errors visible} -- never silently fixed, never silently accepted. The
+engineer sees \codefile{RuleValidationReport} with rule IDs, severity, and messages.
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=6mm and 8mm,
+  stepbox/.style={draw, rounded corners, fill=softgray, minimum height=10mm, align=center, font=\small},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick}
+]
+  \node[stepbox] (gen) {LLM draft};
+  \node[stepbox, right=of gen] (val) {Rule engine};
+  \node[stepbox, right=of val, fill=green!10] (pass) {PASS -> draft\\visible to engineer};
+  \node[stepbox, below=of val, fill=red!8] (fail) {FAIL -> feed errors\\to LLM (1 retry)};
+  \draw[arrow] (gen) -- (val);
+  \draw[arrow] (val) -- node[above]{no errors} (pass);
+  \draw[arrow] (val) -- node[right]{errors} (fail);
+  \draw[arrow] (fail) -| (val);
+\end{tikzpicture}
+\end{center}
+
+% ==================================================================
+\section{Vision Inspection: Quality Gate + VLM}
+% ==================================================================
+
+\subsection{The concept}
+A \textbf{VLM} (vision-language model) reads an image plus a text prompt and answers
+in text: ``there is a scratch in the upper-left quadrant, confidence 0.8.'' But models
+are only as good as their input -- a blurry, dark, or glared photo produces confident
+nonsense. So before the VLM ever runs, deterministic \textbf{image quality metrics}
+decide whether the image is analyzable at all.
+
+\subsection{The quality gate (pure classical CV, no AI)}
+\codefile{services/inspection.py::assess\_quality()} computes four metrics with
+OpenCV:
+\begin{itemize}[nosep]
+  \item \textbf{Resolution}: width/height minimums (can we see detail at all?).
+  \item \textbf{Brightness}: mean pixel intensity within bounds (not pitch-black,
+        not washed out).
+  \item \textbf{Sharpness}: variance of the Laplacian -- blur smears edges, which
+        lowers this variance dramatically (the classic blur detector).
+  \item \textbf{Glare}: fraction of near-saturated pixels (specular reflections
+        hide the surface underneath).
+\end{itemize}
+Failed gate $\Rightarrow$ verdict \textbf{inconclusive} with the exact failed checks
+listed. \emph{``We cannot judge this image'' is the honest answer} -- challenge \#2 from
+the project brief, solved with arithmetic instead of hope.
+
+\layman{The bouncer checks ID before letting anyone into the club. Dark, blurry, or
+glared photos are turned away at the door with a reason -- they never reach the
+(overconfident) AI inside.}
+
+\subsection{The analysis pipeline}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=6mm and 8mm,
+  stepbox/.style={draw, rounded corners, fill=softgray, minimum height=10mm, align=center, font=\small},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick}
+]
+  \node[stepbox] (img) {Image upload};
+  \node[stepbox, right=of img] (gate) {Quality gate};
+  \node[stepbox, right=of gate] (ctx) {Retrieve acceptance\\criteria (RAG)};
+  \node[stepbox, right=of ctx] (vlm) {VLM analysis\\defects + evidence};
+  \node[stepbox, below=of gate, fill=red!8] (incon) {Inconclusive\\+ reasons};
+  \node[stepbox, below=of vlm] (human) {Inspector disposition\\accept/reject/rework};
+  \draw[arrow] (img) -- (gate);
+  \draw[arrow] (gate) -- node[above]{pass} (ctx);
+  \draw[arrow] (gate) -- node[left]{fail} (incon);
+  \draw[arrow] (ctx) -- (vlm);
+  \draw[arrow] (vlm) -- (human);
+\end{tikzpicture}
+\end{center}
+
+Note the second RAG use: before analysis we retrieve the \emph{visual acceptance
+criteria} (e.g., QS-77: ``scratches $>$5mm on sealing faces = reject'') and paste them
+into the VLM prompt -- so defect judgments reference plant policy, not model vibes.
+
+\subsection{Calibrated thresholds and evidence}
+Every defect carries a \textbf{confidence}. Below-threshold findings are kept but
+marked \codefile{below\_threshold: true} -- shown to the human differently rather than
+hidden. Each defect needs \textbf{evidence} (``linear mark consistent with handling,
+does not catch fingernail'') -- because an inspector must be able to \emph{disagree}
+with the AI, and the audit trail records who decided what.
+
+% ==================================================================
+\section{Human-in-the-Loop \& Traceability}
+% ==================================================================
+
+\subsection{The state machine}
+Nothing generated is ever ``final''. A plan is a \textbf{state machine}
+(\codefile{models.PlanStatus}, enforced in \codefile{routes/plans.py}):
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=8mm and 12mm,
+  st/.style={draw, rounded corners, fill=softgray, minimum width=22mm, minimum height=9mm, font=\small\bfseries},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick},
+  lab/.style={font=\scriptsize\itshape}
+]
+  \node[st] (draft) {DRAFT};
+  \node[st, right=of draft] (submitted) {SUBMITTED};
+  \node[st, right=of submitted, fill=green!12] (approved) {APPROVED};
+  \node[st, below=of submitted, fill=red!10] (rejected) {REJECTED};
+  \draw[arrow] (draft) -- node[lab, above]{submit} (submitted);
+  \draw[arrow] (submitted) -- node[lab, above]{approve} (approved);
+  \draw[arrow] (submitted) -- node[lab, right]{reject (+reason)} (rejected);
+  \draw[arrow] (rejected) -- node[lab, above]{revise} (draft);
+  \draw[arrow] (draft) to[out=130, in=50, looseness=1.5] node[lab, above]{save revision (v++)} (draft);
+\end{tikzpicture}
+\end{center}
+
+Illegal transitions are rejected by the API (you cannot approve a draft -- first it
+must be submitted). Every transition writes an \codefile{Approval} row: who, what,
+when, comment, and a \textbf{snapshot of the plan as it was reviewed}. The DB rejects
+the write if a transition is invalid -- the database itself is the last line of defense.
+
+\subsection{The audit trail}
+Every meaningful action (plan generated, decision taken, disposition set, document
+ingested) appends to \codefile{audit\_logs} with actor, action, target, and JSON
+detail. Admins can read the tail via \codefile{/admin/audit}. This is the
+``black box'' that answers ``who did what, when, and based on which sources'' -- the
+traceability objective from the brief.
+
+\subsection{Feedback: learning from corrections}
+Every plan and inspection can be rated 1--5 with notes and structured corrections
+(\codefile{feedback} table). Approving with edits, rejecting with reasons, accepting
+or reworking parts -- all become \emph{training signal} for prompt/RAG improvements.
+This is the ``Manufacturing Memory'' innovation: the system compounds the value of
+every human decision instead of discarding it.
+
+% ==================================================================
+\section{Security \& Users}
+% ==================================================================
+
+\subsection{JWT authentication in plain words}
+Login once $\Rightarrow$ server issues two signed tokens:
+an \textbf{access token} (short-lived, 30 min, sent as \codefile{Authorization: Bearer
+...} on every API call) and a \textbf{refresh token} (7 days, used once to get a new
+pair, then invalidated -- ``rotation''). The server signs tokens with a secret key;
+it never stores passwords in readable form (bcrypt hash). Anyone can \emph{read} a
+token; nobody can \emph{forge} one without the secret.
+
+\layman{Access token = a day pass stamped by the guard; refresh token = your
+membership card that lets you get a new day pass at the desk -- once per card, so a
+stolen card can't be reused silently.}
+
+\subsection{Roles}
+Three roles: \textbf{admin} (user management, audit), \textbf{engineer} (generate,
+approve, inspect, ingest), \textbf{viewer} (read-only). Enforced by a dependency
+(\codefile{require\_roles}) on each route; the first registered user becomes admin.
+
+\subsection{Defense in depth (the challenges table, implemented)}
+\begin{center}
+\begin{tabular}{@{}p{4.6cm}p{9.5cm}@{}}
+\toprule
+\textbf{Threat} & \textbf{Mitigation in this codebase} \\
+\midrule
+Hallucinated advice & RAG + citations + schema-validated output + unsupported-claim scan + human approval \\
+Bad images & Deterministic quality gate with explicit failure reasons \\
+Rule violations & YAML rule packs + repair loop + never-silently-accept \\
+Unauthorized access & JWT + roles + bcrypt + refresh rotation \\
+Abuse & Per-IP rate limiting middleware \\
+Lost accountability & Audit log + approval snapshots + versioned documents \\
+Secret leakage & \codefile{.env} outside git; \codefile{.env.example} documents every key \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ==================================================================
+\section{Production Engineering Practices Used}
+% ==================================================================
+
+\begin{description}[leftmargin=0pt, style=unboxed, itemsep=2pt]
+  \item[12-factor config.] Every knob is an environment variable with a safe default
+      (\codefile{core/config.py}); no secrets in code; \codefile{.env.example} is the contract.
+  \item[Error taxonomy.] One exception class per failure type
+      (\codefile{core/errors.py}) mapped to HTTP codes; clients get
+      \codefile{\{error: \{code, message\}\}} -- never a stack trace.
+  \item[Structured logs + request IDs.] JSON logs with a request-id contextvar
+      (\codefile{core/logging.py}, \codefile{core/middleware.py}); grep-able and
+      traceable across services.
+  \item[Health \& metrics.] \codefile{/health} reports provider and DB status;
+      \codefile{/metrics} exposes Prometheus counters -- what a load balancer and a
+      dashboard need.
+  \item[Interface swappability.] LLM, embeddings, vector store are each behind a tiny
+      abstract base -- providers are .env choices, not rewrites.
+  \item[Hermetic tests.] 29 tests cover auth, ingestion, retrieval, refusal, planning,
+      rules, inspection gate, dispositions, feedback, dashboard, audit -- all offline,
+      deterministic, fast (seconds).
+  \item[Containers.] \codefile{Dockerfile.backend/.frontend} +
+      \codefile{docker-compose.yml / .prod.yml} give one-command deploys with
+      Postgres, healthchecks, and an nginx reverse proxy with security headers.
+\end{description}
+
+% ==================================================================
+\section{Glossary (Jargon $\rightarrow$ Plain Words)}
+% ==================================================================
+
+\begin{longtable}{@{}p{3.4cm}p{12.2cm}@{}}
+\toprule
+\textbf{Term} & \textbf{What it actually means} \\
+\midrule
+LLM & Large Language Model -- a neural network trained on text that predicts plausible continuations. Brilliant, occasionally wrong with total confidence. \\
+VLM & The same idea for images: picture + question in, description out. \\
+RAG & Retrieve relevant passages first, then have the LLM answer \emph{only from them}, citing them. \\
+Embedding & A list of numbers representing a text's meaning; similar meaning = similar numbers (nearby vector). \\
+Cosine similarity & $1 - $ angle between two vectors; 1 = same meaning, 0 = unrelated. \\
+Vector store & A database that finds nearest vectors fast. \\
+Chunk & A paragraph-sized piece of a document; the unit of retrieval and citation. \\
+Token & A word-piece; how LLMs and embeddings split text (and how they charge you). \\
+Prompt & The full text sent to the model: instructions + context + question. \\
+System prompt & The standing instructions defining the model's role and rules. \\
+Hallucination & The model inventing facts. Cured here by grounding, citations, refusal. \\
+JSON schema & The exact required structure of an answer; used to force usable data out of the model. \\
+Rule engine & Deterministic Python checks against plant master data; no AI involved. \\
+Quality gate & Pre-AI arithmetic checks (blur/brightness/glare) that refuse unusable images. \\
+Disposition & The human decision on a part: accept / reject / rework. \\
+JWT & A signed token proving who you are; contains claims (user id, role, expiry). \\
+bcrypt & A slow, salted password hash; passwords are never stored in plain text. \\
+CORS & Browser rule for which websites may call the API; configured via env. \\
+Rate limiting & Cap requests per minute per client to survive abuse or bugs. \\
+ANN & Approximate Nearest Neighbor -- vector search that trades a little accuracy for a lot of speed. \\
+Migration & A versioned change to the DB schema (Alembic); tables evolve without data loss. \\
+Idempotent & Running it twice has the same effect as once (seed script, ingestion). \\
+\bottomrule
+\end{longtable}
+
+\section*{How to study this codebase in one evening}
+\begin{enumerate}[nosep]
+  \item Read \codefile{backend/app/core/config.py} -- see every knob with its default.
+  \item Read \codefile{services/knowledge.py} -- indexing and retrieval, 200 lines.
+  \item Read \codefile{services/planner.py} -- the 5-step pipeline and its prompts.
+  \item Read \codefile{services/rules.py} + \codefile{data/rulepacks/shop\_rules.yaml}
+        -- how plants encode expertise.
+  \item Read \codefile{services/inspection.py::assess\_quality} -- 40 lines of honest
+        computer vision.
+  \item Run \codefile{pytest} and read the tests -- they are executable specifications.
+  \item Click through the UI with the demo account and watch the API logs stream.
+\end{enumerate}
+
+\noindent\emph{The core lesson of this architecture: LLMs are used where language
+matters, arithmetic where truth matters, and humans where judgment matters -- and
+every layer can show its work.}

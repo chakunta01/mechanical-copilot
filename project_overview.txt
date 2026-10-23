@@ -1,0 +1,172 @@
+AI Copilot for Manufacturing Process Planning and Quality
+                                  Inspection
+
+                            25ARE471 Introduction to Generative AI
+                                End-Semester Project Presentation
+
+                                         Shubham Chakunta
+                                         CB.EN.U4MEE23012
+
+                                                                                                                                                                                                           1 / 13
+Motivation / Pain Points
+
+Fragmented Expertise                            Siloed Inspection Data
+
+Manufacturing process planning depends          Quality inspection produces images,
+heavily on experienced engineers and scattered  measurements and reports that are often
+shop-floor knowledge.                           analyzed in separate systems.
+
+Time-Consuming Planning                         Goal
+
+Creating routing sheets, operation sequences,   Combine Generative AI + vision + retrieval to
+tool selections and inspection plans is         support faster, traceable engineering decisions.
+time-consuming.
+
+                                                                                         2 / 13
+Problem Definition / Objectives
+
+Problem
+
+Build a GenAI copilot that converts part requirements and plant knowledge into a draft
+process plan and assists with visual quality inspection.
+
+Objective 1. Generate operation sequence,  Objective 3. Provide traceable
+machine/tool suggestions and inspection    recommendations, human approval and
+checkpoints using retrieved engineering    structured outputs instead of unrestricted text
+knowledge.                                 generation.
+
+Objective 2. Analyze inspection images with a Success Criteria. Useful draft plans · defect
+
+vision model and explain likely defects with detection quality · grounded answers · reduced
+
+confidence and evidence.                   planning effort · human acceptance.
+
+                                                                                        3 / 13
+Solution Formulation
+
+      Inputs        Knowledge     GenAI Copilot    Validation             Outputs
+CAD/drawing,   RAG over manuals,   LLM + VLM     Rules + simi-         Process plan,
+BOM/material,                      reasoning &   larity + confi-    inspection result,
+SOP/standards       routings &                   dence checks       explainable report
+                   quality docs     generation
+
+               Human-in-the-loop approval  approved plan / dispo-
+                sition  feedback stored for continuous improvement
+
+                                                                    4 / 13
+Solution Formulation - Explanation
+
+01                             02                           03                                04                      05
+
+          Input Layer                Knowledge Layer                 Copilot Layer         Validation Layer         Human-in-the-
+ Part drawing/spec, mate-          Documents chunked,       LLM converts requirements    Deterministic rules,       Loop & Audit
+rial, machine capability, ex-  embedded and retrieved to                                allowable ranges, du-  Engineer reviews, edits
+isting routing sheets, SOPs    ground recommendations in      into structured process-    plicate checks and    and approves; refer-
+                                plant-specific information     plan fields; VLM inter-  confidence thresholds    ences and approval
+   and inspection images                                      prets inspection images                          stored for traceability
+
+                                                                                                               5 / 13
+Traditional Workflow vs GenAI Workflow
+
+Traditional Workflow                  GenAI-Assisted Workflow
+
+      Search drawings and             Upload / connect engineering inputs
+       manuals manually
+
+Engineer creates operation sequence     Retrieve relevant plant knowledge
+
+Separate quality inspection software    Generate structured
+                                         draft process plan
+
+Findings documented manually            Analyze images + explain defects
+
+Knowledge remains fragmented            Validate against rules
+
+Rework when requirements change         Engineer approves and feeds back
+
+                                                                                                                      6 / 13
+Usage of GenAI Tools
+
+LLM                                           Vision Model
+
+      Generate process-plan drafts                  Inspect part images
+      Explain recommendations                       Classify / localize defects
+      Convert free text  JSON                       Describe visual evidence
+
+RAG & Vector DB                               Python Stack
+
+      Retrieve SOPs, standards, routings and        Orchestration · APIs · Evaluation
+      lessons learned                               OpenCV · LangChain/LlamaIndex-style RAG
+      Store embeddings & similarity search          FAISS/Chroma vector store ·
+      Source traceability                           FastAPI/Streamlit interface
+
+                                                                                                                                                    7 / 13
+Challenge Identification
+
+Challenge                              Mitigation
+
+1. Hallucination / unsupported advice  RAG, source citations, constrained output schema, human approval
+2. Poor image quality / lighting       Image quality gate, normalization, augmentation and confidence threshold
+3. Domain-specific terminology         Plant glossary, fine-tuned prompts and retrieval from approved documents
+4. Changing process constraints        Machine-capability rules, current master data and versioned documents
+5. False positives / negatives         Benchmark images, calibrated thresholds and human review for borderline cases
+6. Data privacy & IP                   Access control, redaction, private deployment and logging policies
+
+                                                                                                                      8 / 13
+Evaluation Metrics
+
+Process Planning           RAG / Grounding         Vision Inspection           Human Evaluation
+
+Field accuracy             Retrieval Recall@k      Precision / Recall          Correctness
+Constraint violation rate  Context relevance       F1-score                    Usefulness
+Expert acceptance rate     Citation correctness    IoU for localization        Explainability
+Planning time saved        Unsupported-claim rate  False reject / escape rate  Engineer preference
+
+                                                                                                    9 / 13
+Performance Validation Plan
+
+      Compare GenAI-assisted workflow against a baseline using the same test cases.
+      Use a labeled inspection dataset and expert-reviewed process-plan test set.
+      Report both model metrics and practical impact: time saved, acceptance rate and error
+      reduction.
+
+                                                                                                                                                                                                                     10 / 13
+Evaluation Pattern
+
+       01                           02                      03                          04                           05
+
+         Dataset                      Baseline                 Copilot               Expert Review                    Result
+Representative parts +         Manual planning +      RAG + LLM + VLM             Engineer scores out-          Compare metrics
+ labeled defect images       conventional inspection                             puts and explanations
+                                                         + rule validation
+
+                                        Example Acceptance Rubric (1-5)
+
+Correctness                  Grounding                               Usefulness                                 Safety
+
+5 = technically correct and  5 = every critical recommendation sup-  5 = requires little/no editing by the en-  5 = no unverified critical instruction
+constraint-compliant         ported by approved source material      gineer                                     is presented as final
+
+                                                                                                                                 11 / 13
+Customization / Innovation Components
+
+1. Manufacturing Memory                 3. Constraint-Aware Generation            5. Unified Copilot
+Store approved plans, engineer          Generate only within machine, tooling,    One interface for planning, inspection,
+corrections and lessons learned for     material and quality constraints.         documentation and engineering Q&A.
+future retrieval.
+                                        4. Human Feedback Loop                    6. Traceable Output
+2. Explainable Inspection               Engineer edits become structured          Version, source references and approval
+Show defect evidence, confidence and a  feedback for prompt/RAG improvement.      status attached to every generated
+concise reason rather than only                                                   result.
+PASS/FAIL.
+
+Innovation Focus
+Move from a generic chatbot to a grounded, constraint-aware engineering copilot.
+
+                                                                                  12 / 13
+            Thank You!
+
+AI Copilot for Manufacturing Process Planning and Quality Inspection
+
+                                                                                                                                                                                             13 / 13
+

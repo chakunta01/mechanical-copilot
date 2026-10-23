@@ -1,0 +1,49 @@
+# Machine master data & capability rules.
+# Adjust to your plant's approved equipment list. Used by the deterministic validator.
+machines:
+  "CNC Lathe-1":
+    forbidden_processes: [milling, grinding]
+    allowed_parameters: [spindle_rpm, feed_mm_rev, depth_of_cut_mm, coolant]
+  "CNC Lathe-2":
+    forbidden_processes: [milling]
+    allowed_parameters: [spindle_rpm, feed_mm_rev, depth_of_cut_mm, coolant]
+  "VMC-1":
+    forbidden_processes: [turning]
+    allowed_parameters: [spindle_rpm, feed_mm_min, depth_of_cut_mm, coolant, peck_depth_mm]
+  "VMC-2":
+    forbidden_processes: [turning]
+    allowed_parameters: [spindle_rpm, feed_mm_min, depth_of_cut_mm, coolant, peck_depth_mm]
+  "HMC-1":
+    forbidden_processes: [turning]
+    allowed_parameters: [spindle_rpm, feed_mm_min, coolant]
+  "Surface Grinder-1":
+    forbidden_processes: [turning, milling, drilling]
+    allowed_parameters: [wheel_speed_mps, table_speed, coolant]
+  "Horizontal Bandsaw":
+    forbidden_processes: [turning, milling, drilling, grinding]
+    allowed_parameters: [blade_speed_mpm, feed_mm_min, coolant]
+  "QC Bench":
+    forbidden_processes: []
+    allowed_parameters: []
+
+# Material master data with approved processes.
+materials:
+  "steel":
+    forbidden_processes: []
+    required_notes: ["material certification"]
+  "aluminum":
+    forbidden_processes: [welding]
+    required_notes: []
+  "titanium":
+    forbidden_processes: []
+    required_notes: ["material certification", "tool wear monitoring"]
+  "brass":
+    forbidden_processes: []
+    required_notes: []
+
+# Cross-cutting hard rules.
+hard_rules:
+  quantity_breaks:
+    - min_qty: 1
+      max_qty: 10
+      require_full_inspection: true
