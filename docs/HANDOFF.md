@@ -1,6 +1,22 @@
 # Handoff — What's Done & What's Needed From You
 
-## Status: everything runs today, offline, with zero API keys
+## Update — 23 October 2026 (after project report)
+
+The improvement roadmap in `project_report.pdf` was executed. What changed:
+
+| Report item | Status |
+|---|---|
+| R1.1 Git + CI | ✅ Repo initialized (`main`, 3 commits), fixed `.gitignore` (kept `data/seed` + `data/rulepacks` in VCS; ignores logs, runtime DBs/uploads, `tools/`, `backend/.reportlab_tmp/`, `.freebuff/`), added [.github/workflows/ci.yml](../.github/workflows/ci.yml) (ruff, mypy, pytest, frontend typecheck+build). Note: commit author email is a placeholder `shubhamchakunta@users.noreply.github.com` (repo-local config) — change with `git config user.email` before pushing to GitHub. |
+| R1.1 Quality sweep | ✅ ruff 0 errors (was 38), mypy 0 errors on `app` (was: crashed on numpy stubs — `python_version` moved to 3.12; 23 pre-existing type errors found and fixed once it could actually check). One real latent bug fixed: `NameError` on undefined `Citation` in `knowledge.citation_of`. `LLMGateway.complete_json` is now generic over the schema type, so callers get correctly typed models. pytest re-verified: 31/31, exit 0. |
+| R1.2 Evaluation harness | ✅ `python scripts/eval_harness.py` (backend venv) — measures Recall@k / MRR on `data/eval/golden_retrieval.json` (8 demo-corpus cases), plan citation coverage + unsupported-claim rate on the SHA‑F‑350 demo part, plus optional inspection P/R (`data/eval/images/{defect,ok}/*.jpg`) and expert rubric (`data/eval/rubric.json`). Runs on a throwaway SQLite DB; writes `data/eval/last_report.json`; `--min-recall-at-3 X` turns it into a CI gate. First baseline (offline hashing embeddings): Recall@1 0.75, MRR 0.875, plan citation coverage 0.25 (FakeLLM), unsupported claims 0. |
+| R2.1 Prod compose validation | ⛔ Blocker: Docker is not available in this workspace (`docker: command not found`), so `docker-compose.prod.yml` remains unexecuted. Needs a real Docker host to run once: set `SECRET_KEY` + `POSTGRES_PASSWORD`, `docker compose -f docker-compose.prod.yml up --build -d`, then run `scripts/e2e_verify.sh http://localhost:8080`. |
+| LLM path decision (next step 4) | ❓ Open — user decision. Current: portable Ollama `qwen2.5vl:3b` (zero credits). Alternatives in the report: cloud key with credits, or larger local model (`qwen2.5vl:7b`) if VRAM allows. |
+
+Still needed from you (unchanged items below, plus these):
+- 10–20 labeled inspection images → `data/eval/images/defect/` and `data/eval/images/ok/` (harness auto-detects them and reports precision/recall).
+- 2–3 expert-reviewed plans → `data/eval/rubric.json` (format: `[ {"id": "...", "scores": {"correctness": 5, "grounding": 4, "usefulness": 4, "safety": 5}} ]`).
+
+## Original status: everything runs today, offline, with zero API keys
 
 | Component | State |
 |---|---|
