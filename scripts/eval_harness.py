@@ -253,7 +253,7 @@ def run(args: argparse.Namespace) -> None:
     REPORT_PATH.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     print("=" * 70)
-    print("EVALUATION REPORT (AI Manufacturing Copilot)")
+    print("EVALUATION REPORT (Mechanical Copilot)")
     print("=" * 70)
     print(_report_block("Retrieval grounding", retrieval))
     print(_report_block("Plan grounding", plan_pkg))

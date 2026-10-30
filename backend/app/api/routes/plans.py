@@ -38,19 +38,19 @@ def list_plans(
 ) -> PlansOut:
     from sqlalchemy import func
 
-    query = select(ProcessPlan).order_by(ProcessPlan.created_at.desc())
+    query = select(ProcessPlan).where(ProcessPlan.owner_id == user.id).order_by(ProcessPlan.created_at.desc())
     if status:
         query = query.where(ProcessPlan.status == PlanStatus(status))
     if part_number:
         query = query.where(ProcessPlan.part_number.ilike(f"%{part_number}%"))
-    total = db.scalar(select(func.count()).select_from(ProcessPlan)) or 0
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     plans = db.scalars(query.limit(min(limit, 200)).offset(offset)).all()
     return PlansOut(items=[ProcessPlanOut.model_validate(p) for p in plans], total=total)
 
 
 @router.get("/{plan_id}", response_model=ProcessPlanOut)
 def get_plan(plan_id: str, user: CurrentUser, db: DbSession) -> ProcessPlanOut:
-    plan = db.get(ProcessPlan, plan_id)
+    plan = db.scalar(select(ProcessPlan).where(ProcessPlan.id == plan_id, ProcessPlan.owner_id == user.id))
     if plan is None:
         raise NotFound("Plan not found")
     return ProcessPlanOut.model_validate(plan)
@@ -58,7 +58,7 @@ def get_plan(plan_id: str, user: CurrentUser, db: DbSession) -> ProcessPlanOut:
 
 @router.get("/{plan_id}/approvals", response_model=ApprovalsOut)
 def get_approvals(plan_id: str, user: CurrentUser, db: DbSession) -> ApprovalsOut:
-    plan = db.get(ProcessPlan, plan_id)
+    plan = db.scalar(select(ProcessPlan).where(ProcessPlan.id == plan_id, ProcessPlan.owner_id == user.id))
     if plan is None:
         raise NotFound("Plan not found")
     approvals = db.scalars(
@@ -69,7 +69,7 @@ def get_approvals(plan_id: str, user: CurrentUser, db: DbSession) -> ApprovalsOu
 
 @router.post("/{plan_id}/decision", response_model=ProcessPlanOut)
 def decide(plan_id: str, payload: PlanDecisionIn, user: EngineerUser, db: DbSession) -> ProcessPlanOut:
-    plan = db.get(ProcessPlan, plan_id)
+    plan = db.scalar(select(ProcessPlan).where(ProcessPlan.id == plan_id, ProcessPlan.owner_id == user.id))
     if plan is None:
         raise NotFound("Plan not found")
 
@@ -117,7 +117,7 @@ def decide(plan_id: str, payload: PlanDecisionIn, user: EngineerUser, db: DbSess
 @router.post("/{plan_id}/duplicate", response_model=ProcessPlanOut, status_code=201)
 def duplicate(plan_id: str, user: EngineerUser, db: DbSession) -> ProcessPlanOut:
     """Fork an approved plan as a new draft (continuous-improvement workflow)."""
-    plan = db.get(ProcessPlan, plan_id)
+    plan = db.scalar(select(ProcessPlan).where(ProcessPlan.id == plan_id, ProcessPlan.owner_id == user.id))
     if plan is None:
         raise NotFound("Plan not found")
     copy = ProcessPlan(

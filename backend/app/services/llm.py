@@ -28,6 +28,7 @@ T = TypeVar("T", bound=BaseModel)
 class LLMResponse(BaseModel):
     content: str
     model: str
+    finish_reason: str | None = None
     # Values may be ints (OpenAI) or nested dicts like prompt_tokens_details
     # (OpenAI detailed usage, mirrored by Ollama/vLLM) — keep permissive.
     usage: dict[str, Any] = {}
@@ -197,6 +198,7 @@ class OpenAICompatibleLLM(BaseLLM):
             content=choice["message"].get("content") or "",
             model=data.get("model", self.model),
             usage=data.get("usage", {}) or {},
+            finish_reason=choice.get("finish_reason"),
         )
 
     def complete(
@@ -219,13 +221,128 @@ class OpenAICompatibleLLM(BaseLLM):
         try:
             return self._post(payload)
         except UpstreamError as exc:
-            # Endpoint may not support structured outputs — degrade gracefully.
+            # Structured-output support varies across OpenAI-compatible endpoints.
             if response_format and any(code in str(exc) for code in ("HTTP 400", "HTTP 404", "HTTP 422", "HTTP 500")):
                 logger.warning("structured output rejected by endpoint, retrying without response_format: %s", str(exc)[:120])
                 payload.pop("response_format", None)
                 return self._post(payload)
             raise
 
+
+class OpenAIResponsesLLM(BaseLLM):
+    """OpenAI Responses API client for current first-party GPT models."""
+
+    name = "openai"
+
+    def __init__(self, api_key: str, model: str, timeout_s: int = 120) -> None:
+        self.base_url = "https://api.openai.com/v1"
+        self.api_key = api_key
+        self.model = model
+        self.timeout_s = timeout_s
+
+    @staticmethod
+    def _input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        converted: list[dict[str, Any]] = []
+        for message in messages:
+            content = message.get("content", "")
+            if isinstance(content, list):
+                parts: list[dict[str, Any]] = []
+                for part in content:
+                    if part.get("type") == "text":
+                        parts.append({"type": "input_text", "text": part.get("text", "")})
+                    elif part.get("type") == "image_url":
+                        image = part.get("image_url", {})
+                        image_url = image.get("url") if isinstance(image, dict) else image
+                        if image_url:
+                            parts.append({"type": "input_image", "image_url": image_url})
+                content = parts
+            converted.append({"role": message.get("role", "user"), "content": content})
+        return converted
+
+    @staticmethod
+    def _strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
+        """Normalize Pydantic JSON Schema to the strict subset used by Responses."""
+        normalized = dict(schema)
+        normalized.pop("default", None)
+        normalized.pop("examples", None)
+        properties = normalized.get("properties")
+        if normalized.get("type") == "object" and isinstance(properties, dict):
+            normalized["additionalProperties"] = False
+            normalized["required"] = list(properties)
+        for key, value in tuple(normalized.items()):
+            if isinstance(value, dict):
+                normalized[key] = OpenAIResponsesLLM._strict_schema(value)
+            elif isinstance(value, list):
+                normalized[key] = [
+                    OpenAIResponsesLLM._strict_schema(item) if isinstance(item, dict) else item
+                    for item in value
+                ]
+        return normalized
+
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        response_format: dict[str, Any] | None = None,
+    ) -> LLMResponse:
+        del temperature  # GPT-6 reasoning models control sampling through reasoning effort.
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "input": self._input(messages),
+            "max_output_tokens": max_tokens or 1024,
+            "reasoning": {"effort": "low"},
+            "store": False,
+        }
+        if response_format and response_format.get("type") == "json_schema":
+            format_spec = response_format.get("json_schema", {})
+            payload["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": format_spec.get("name", "response"),
+                    "strict": True,
+                    "schema": self._strict_schema(format_spec.get("schema", {})),
+                }
+            }
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/responses",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json=payload,
+                timeout=self.timeout_s,
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise UpstreamError(f"OpenAI API HTTP {exc.response.status_code}: {exc.response.text[:300]}") from exc
+        except httpx.HTTPError as exc:
+            raise UpstreamError(f"OpenAI API request failed: {exc}") from exc
+
+        data = resp.json()
+        output_text = data.get("output_text")
+        if not output_text:
+            chunks = []
+            for item in data.get("output", []):
+                if item.get("type") == "message":
+                    chunks.extend(
+                        content.get("text", "")
+                        for content in item.get("content", [])
+                        if content.get("type") == "output_text"
+                    )
+            output_text = "".join(chunks)
+        if not output_text:
+            raise UpstreamError("OpenAI API returned no text output")
+        return LLMResponse(
+            content=output_text,
+            model=data.get("model", self.model),
+            usage=data.get("usage", {}) or {},
+            finish_reason=(
+                "length"
+                if data.get("status") == "incomplete"
+                and (data.get("incomplete_details") or {}).get("reason") == "max_output_tokens"
+                else data.get("status")
+            ),
+        )
 
 class FakeLLM(BaseLLM):
     """Deterministic offline LLM. Produces plausible outputs so the entire system
@@ -350,6 +467,12 @@ _FAKE_QA = {
 
 
 def get_llm() -> BaseLLM:
+    if settings.llm_provider == "openai" and settings.llm_api_key:
+        return OpenAIResponsesLLM(
+            api_key=settings.llm_api_key,
+            model=settings.llm_model,
+            timeout_s=settings.llm_timeout_s,
+        )
     if settings.llm_provider == "openai_compatible" and settings.llm_api_key:
         return OpenAICompatibleLLM(
             base_url=settings.llm_base_url,

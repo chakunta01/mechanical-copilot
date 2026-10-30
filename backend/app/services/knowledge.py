@@ -6,6 +6,8 @@ Retrieval: embed query -> vector search -> optional keyword boost -> Citation ob
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -80,6 +82,7 @@ def ingest_document(
                 )
             )
         store.upsert(records)
+        _off_topic_baseline_cached.cache_clear()
 
         document.status = DocumentStatus.INGESTED
         document.chunk_count = len(chunks)
@@ -150,6 +153,7 @@ def retrieve(
     top_k: int | None = None,
     doc_types: list[str] | None = None,
     min_score: float | None = None,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Retrieve cited chunks for a query. Returns citation-shaped dicts."""
     from app.core.config import settings
@@ -168,8 +172,8 @@ def retrieve(
     store = get_vector_store()
 
     allowed_docs: list[str] | None = None
-    if doc_types:
-        ids = db_query_doc_ids(doc_types)
+    if doc_types or user_id:
+        ids = db_query_doc_ids(doc_types, user_id=user_id)
         allowed_docs = ids if ids else ["__none__"]
 
     hits = store.search(q_vec, top_k=top_k * 2, document_ids=allowed_docs)
@@ -239,22 +243,54 @@ _OFF_TOPIC_PROBES = (
 )
 
 
-def off_topic_baseline() -> float:
+def off_topic_baseline(user_id: str | None = None) -> float:
     """Best corpus similarity for known-irrelevant questions, using the active
-    embedding provider (one batched embeddings call, five tiny searches)."""
+    embedding provider. Probe embeddings are cached until the indexed corpus changes."""
+    from app.core.config import settings
+
+    embeddings = get_embeddings()
+    store = get_vector_store()
+    document_ids = tuple(sorted(db_query_doc_ids(user_id=user_id))) if user_id else None
+    return _off_topic_baseline_cached(
+        embeddings.name,
+        settings.embeddings_model,
+        store.count(),
+        document_ids,
+    )
+
+
+@lru_cache(maxsize=128)
+def _off_topic_baseline_cached(
+    embedding_name: str,
+    embedding_model: str,
+    vector_count: int,
+    document_ids: tuple[str, ...] | None,
+) -> float:
+    """Cache probe work by embedding config and indexed document corpus."""
+    del embedding_name, embedding_model, vector_count  # used as cache-key components
     embeddings = get_embeddings()
     vectors = embeddings.embed(list(_OFF_TOPIC_PROBES))
     store = get_vector_store()
-    tops = [store.search(v, top_k=1)[0][1] for v in vectors if store.search(v, top_k=1)]
+    scoped_documents = list(document_ids) if document_ids is not None else None
+    tops = []
+    for vector in vectors:
+        hits = store.search(vector, top_k=1, document_ids=scoped_documents)
+        if hits:
+            tops.append(hits[0][1])
     return max(tops) if tops else 0.0
 
 
-def db_query_doc_ids(doc_types: list[str]) -> list[str]:
+def db_query_doc_ids(doc_types: list[str] | None = None, *, user_id: str | None = None) -> list[str]:
     """Lookup document ids filtered by type; isolated here to keep retrieve() pure-ish."""
     from app.core.db import SessionLocal
 
     with SessionLocal() as db:
-        rows = db.execute(select(Document.id).where(Document.doc_type.in_(doc_types))).all()
+        query = select(Document.id)
+        if doc_types:
+            query = query.where(Document.doc_type.in_(doc_types))
+        if user_id:
+            query = query.where(Document.created_by.in_(["system", user_id]))
+        rows = db.execute(query).all()
         return [r[0] for r in rows]
 
 

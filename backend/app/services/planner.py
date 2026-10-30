@@ -167,7 +167,7 @@ def generate_plan(db: Session, user_id: str, payload: PlanGenerateIn) -> Process
         ]
     ).strip()
     doc_types = ["sop", "routing", "standard", "lesson"]
-    citations = knowledge.retrieve(query, doc_types=doc_types, top_k=settings.retrieval_top_k)
+    citations = knowledge.retrieve(query, doc_types=doc_types, top_k=settings.retrieval_top_k, user_id=user_id)
     context = _build_context(citations)
 
     # 2. Generate with schema-constrained JSON output.

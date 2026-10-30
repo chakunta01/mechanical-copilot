@@ -236,3 +236,17 @@ class QaMessage(Base):
     citations: Mapped[list] = mapped_column(JSON, default=list)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class QaMedia(Base):
+    __tablename__ = "qa_media"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    thread_id: Mapped[str] = mapped_column(ForeignKey("qa_threads.id"), index=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("qa_messages.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="image")
+    mime_type: Mapped[str] = mapped_column(String(127), default="image/png")
+    file_path: Mapped[str] = mapped_column(String(1024))
+    prompt: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

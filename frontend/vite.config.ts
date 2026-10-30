@@ -6,9 +6,20 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": { target: "http://localhost:8000", changeOrigin: true },
-      "/files": { target: "http://localhost:8000", changeOrigin: true },
-      "/health": { target: "http://localhost:8000", changeOrigin: true },
+      "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      "/files": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      "/health": { target: "http://127.0.0.1:8000", changeOrigin: true },
+    },
+  },
+  preview: {
+    host: "127.0.0.1",
+    port: 5174,
+    strictPort: true,
+    allowedHosts: [".trycloudflare.com", ".lhr.life"],
+    proxy: {
+      "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      "/files": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      "/health": { target: "http://127.0.0.1:8000", changeOrigin: true },
     },
   },
   build: {

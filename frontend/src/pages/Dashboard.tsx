@@ -81,7 +81,7 @@ export function DashboardPage() {
         <div className="row">
           <Link to="/plans"><button className="btn">＋ Generate process plan</button></Link>
           <Link to="/inspections"><button className="btn secondary">🔍 Inspect part image</button></Link>
-          <Link to="/ask"><button className="btn secondary">💬 Ask the knowledge base</button></Link>
+          <Link to="/"><button className="btn secondary">✳ Ask Mechanical Copilot</button></Link>
           <Link to="/documents"><button className="btn secondary">📚 Manage documents</button></Link>
         </div>
       </div>

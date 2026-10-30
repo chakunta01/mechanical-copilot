@@ -1,12 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { api, type User } from "./api";
-import { DashboardPage } from "./pages/Dashboard";
-import { DocumentsPage } from "./pages/Documents";
-import { PlansPage } from "./pages/Plans";
-import { PlanDetailPage } from "./pages/PlanDetail";
-import { InspectionsPage } from "./pages/Inspections";
 import { AskPage } from "./pages/Ask";
 import { AuthPage } from "./pages/Auth";
 
@@ -17,7 +12,7 @@ interface AuthCtx {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (email: string, password: string, name: string, adminBootstrapToken: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -52,8 +47,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("copilot.refresh", pair.refresh_token);
       setUser(await api.me());
     },
-    register: async (email, password, name) => {
-      const pair = await api.register(email, password, name);
+    register: async (email, password, name, adminBootstrapToken) => {
+      const pair = await api.register(email, password, name, adminBootstrapToken);
       localStorage.setItem("copilot.access", pair.access_token);
       localStorage.setItem("copilot.refresh", pair.refresh_token);
       setUser(await api.me());
@@ -67,51 +62,24 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   return <AuthContext.Provider value={ctx}>{children}</AuthContext.Provider>;
 }
 
-// --------------------------------------------------------------------------- //
-// Layout
-// --------------------------------------------------------------------------- //
-const NAV = [
-  { to: "/", label: "Dashboard", icon: "▦" },
-  { to: "/plans", label: "Process Plans", icon: "📋" },
-  { to: "/inspections", label: "Inspections", icon: "🔍" },
-  { to: "/ask", label: "Ask the KB", icon: "💬" },
-  { to: "/documents", label: "Knowledge Base", icon: "📚" },
-];
-
 function Shell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const location = useLocation();
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <span className="logo">⚙</span> MFG Copilot
-        </div>
-        <nav className="sidebar-nav">
-          {NAV.map((n) => (
-            <Link key={n.to} to={n.to} className={`nav-item ${location.pathname === n.to ? "active" : ""}`}>
-              <span>{n.icon}</span> {n.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <div>{user?.full_name || user?.email}</div>
-          <div style={{ opacity: 0.6 }}>{user?.role}</div>
-        </div>
-      </aside>
-      <div className="main">
-        <header className="topbar">
-          <div className="topbar-title">AI Copilot for Manufacturing Process Planning & Quality Inspection</div>
+      <div className="main copilot-app-main">
+        <header className="topbar copilot-topbar">
+          <Link to="/" className="topbar-brand">
+            <span className="logo">⚙</span>
+            <span className="brand-wordmark"><strong>Mechanical Copilot</strong><small>ENGINEERING STUDIO</small></span>
+          </Link>
           <div className="topbar-user">
-            <span>{user?.email}</span>
+            <span>{user?.full_name || user?.email}</span>
             <button className="btn secondary sm" onClick={logout}>
               Sign out
             </button>
           </div>
         </header>
-        <div className="page">{children}</div>
+        <div className="page copilot-page">{children}</div>
       </div>
-    </div>
   );
 }
 
@@ -132,12 +100,9 @@ function App() {
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
           <Route path="*" element={<RequireAuth><Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/plans" element={<PlansPage />} />
-            <Route path="/plans/:id" element={<PlanDetailPage />} />
-            <Route path="/inspections" element={<InspectionsPage />} />
+            <Route path="/" element={<AskPage />} />
             <Route path="/ask" element={<AskPage />} />
-            <Route path="/documents" element={<DocumentsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes></RequireAuth>} />
         </Routes>
       </BrowserRouter>

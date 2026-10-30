@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import uuid
 from datetime import UTC, datetime
 
@@ -10,6 +11,7 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.errors import Conflict, Unauthorized
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -29,14 +31,18 @@ def register(payload: RegisterIn, db: DbSession) -> TokenOut:
     if existing:
         raise Conflict("Email already registered")
 
-    # First user ever becomes admin; the rest are engineers.
-    is_first = db.scalar(select(User.id).limit(1)) is None
+    # Public registration never grants admin by account-creation order.
+    has_admin_token = bool(settings.admin_bootstrap_token) and hmac.compare_digest(
+        payload.admin_bootstrap_token, settings.admin_bootstrap_token
+    )
+    if not settings.is_prod and not db.scalar(select(User.id).limit(1)):
+        has_admin_token = True
     user = User(
         id=f"usr_{uuid.uuid4().hex[:20]}",
         email=payload.email.lower(),
         full_name=payload.full_name,
         password_hash=hash_password(payload.password),
-        role=Role.ADMIN if is_first else Role.ENGINEER,
+        role=Role.ADMIN if has_admin_token else Role.ENGINEER,
     )
     db.add(user)
     db.flush()

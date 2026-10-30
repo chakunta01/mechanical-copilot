@@ -51,6 +51,7 @@ class RegisterIn(BaseModel):
     # bcrypt operates on max 72 bytes; cap here so hashing never truncates silently.
     password: str = Field(min_length=10, max_length=72)
     full_name: str = Field(default="", max_length=255)
+    admin_bootstrap_token: str = Field(default="", max_length=256)
 
 
 class LoginIn(BaseModel):
@@ -262,8 +263,6 @@ class InspectionResult(BaseModel):
 class InspectionOut(ORMModel):
     id: str
     part_number: str
-    image_path: str
-    thumbnail_path: str
     status: str
     quality: dict[str, Any]
     result: dict[str, Any]
@@ -320,12 +319,27 @@ class QaAskIn(BaseModel):
     question: str = Field(min_length=3, max_length=4000)
 
 
+class QaImageGenerateIn(BaseModel):
+    thread_id: str | None = None
+    prompt: str = Field(min_length=3, max_length=4000)
+
+
+class QaMediaOut(BaseModel):
+    id: str
+    kind: Literal["image", "video"]
+    mime_type: str
+    url: str
+    prompt: str
+    created_at: datetime
+
+
 class QaMessageOut(BaseModel):
     id: int
     role: str
     content: str
     citations: list[Citation] = Field(default_factory=list)
     confidence: float
+    attachments: list[QaMediaOut] = Field(default_factory=list)
     created_at: datetime
 
 

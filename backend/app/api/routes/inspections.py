@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile
+from fastapi.responses import FileResponse
+from PIL import Image
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession, EngineerUser
@@ -61,22 +63,40 @@ def list_inspections(
     limit: int = 50,
     offset: int = 0,
 ) -> InspectionsOut:
-    query = select(Inspection).order_by(Inspection.created_at.desc())
+    query = select(Inspection).where(Inspection.owner_id == user.id).order_by(Inspection.created_at.desc())
     if part_number:
         query = query.where(Inspection.part_number.ilike(f"%{part_number}%"))
     if status:
         query = query.where(Inspection.status == InspectionStatus(status))
-    total = db.scalar(select(func.count()).select_from(Inspection)) or 0
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     items = db.scalars(query.limit(min(limit, 200)).offset(offset)).all()
     return InspectionsOut(items=[InspectionOut.model_validate(i) for i in items], total=total)
 
 
 @router.get("/{inspection_id}", response_model=InspectionOut)
 def get_inspection(inspection_id: str, user: CurrentUser, db: DbSession) -> InspectionOut:
-    inspection = db.get(Inspection, inspection_id)
+    inspection = db.scalar(select(Inspection).where(Inspection.id == inspection_id, Inspection.owner_id == user.id))
     if inspection is None:
         raise NotFound("Inspection not found")
     return InspectionOut.model_validate(inspection)
+
+
+@router.get("/{inspection_id}/image")
+def get_inspection_image(inspection_id: str, user: CurrentUser, db: DbSession) -> FileResponse:
+    inspection = db.scalar(select(Inspection).where(Inspection.id == inspection_id, Inspection.owner_id == user.id))
+    if inspection is None:
+        raise NotFound("Inspection not found")
+    path = Path(inspection.image_path).resolve()
+    upload_root = Path(settings.upload_dir).resolve()
+    if not path.is_relative_to(upload_root) or not path.is_file():
+        raise NotFound("Inspection image not found")
+    with Image.open(path) as image:
+        media_type = Image.MIME.get(image.format or "", "application/octet-stream")
+    return FileResponse(
+        path,
+        media_type=media_type,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.post("/{inspection_id}/disposition", response_model=InspectionOut)
@@ -86,7 +106,7 @@ def set_disposition(
     user: EngineerUser,
     db: DbSession,
 ) -> InspectionOut:
-    inspection = db.get(Inspection, inspection_id)
+    inspection = db.scalar(select(Inspection).where(Inspection.id == inspection_id, Inspection.owner_id == user.id))
     if inspection is None:
         raise NotFound("Inspection not found")
     inspection.disposition = payload.disposition

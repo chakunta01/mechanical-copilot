@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Inspection } from "../api";
 
-function imgUrl(p: string): string {
-  return `/files/${p.replace(/\\/g, "/").split("uploads/")[1] ?? ""}`;
-}
-
 export function InspectionsPage() {
   const [items, setItems] = useState<Inspection[]>([]);
   const [current, setCurrent] = useState<Inspection | null>(null);
@@ -126,13 +122,27 @@ function InspectionDetail({
   setNotes: (s: string) => void;
 }) {
   const r = insp.result ?? {};
+  const [imageUrl, setImageUrl] = useState("");
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    api.inspectionImage(insp.id).then((url) => {
+      objectUrl = url;
+      if (active) setImageUrl(url);
+      else URL.revokeObjectURL(url);
+    }).catch(() => setImageUrl(""));
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [insp.id]);
   return (
     <div className="insp-layout">
       <div>
         <div className="card">
           <div className="card-title">Image (quality gate: {insp.quality?.passed ? "PASSED" : "FAILED"})</div>
           <div className="image-frame">
-            <img src={imgUrl(insp.image_path)} alt="part under inspection" />
+            {imageUrl ? <img src={imageUrl} alt="part under inspection" /> : <div className="empty-state">Loading private inspection image…</div>}
           </div>
           {insp.quality && (
             <div className="mt">

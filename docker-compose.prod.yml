@@ -1,4 +1,4 @@
-# Production topology: nginx-served frontend + backend + postgres.
+# Public production topology: Caddy TLS edge + nginx frontend + API + PostgreSQL.
 services:
   db:
     image: postgres:16-alpine
@@ -24,19 +24,23 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-copilot}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-copilot}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      ADMIN_BOOTSTRAP_TOKEN: ${ADMIN_BOOTSTRAP_TOKEN:?set ADMIN_BOOTSTRAP_TOKEN in .env}
       APP_ENV: prod
-      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
-      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai_compatible}
+      LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY in .env}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       LLM_VISION_MODEL: ${LLM_VISION_MODEL:-gpt-4o-mini}
-      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-hashing}
-      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
+      IMAGE_API_KEY: ${IMAGE_API_KEY:-}
+      IMAGE_API_BASE_URL: ${IMAGE_API_BASE_URL:-https://api.openai.com/v1}
+      IMAGE_GENERATION_MODEL: ${IMAGE_GENERATION_MODEL:-gpt-image-2.5-flare}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-openai_compatible}
+      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:?set EMBEDDINGS_API_KEY in .env}
       EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-https://api.openai.com/v1}
       EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-text-embedding-3-small}
       VECTOR_STORE: ${VECTOR_STORE:-numpy}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
-      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-120}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env}
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-30}
     volumes:
       - uploads:/srv/data/uploads
     depends_on:
@@ -48,11 +52,27 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     restart: unless-stopped
-    ports:
-      - "8080:80"
     depends_on:
       - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
 
 volumes:
   pgdata:
   uploads:
+  caddy_data:
+  caddy_config:

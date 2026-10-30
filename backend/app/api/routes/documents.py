@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from app.api.deps import CurrentUser, DbSession, EngineerUser
 from app.core.config import settings
 from app.core.errors import NotFound, PayloadTooLarge, UnsupportedMediaType
-from app.models import AuditLog, Chunk, Document
+from app.models import AuditLog, Chunk, Document, Role
 from app.schemas import Citation, DocumentIn, DocumentOut, DocumentsOut, SearchOut
 from app.services import knowledge
 
@@ -91,9 +91,12 @@ async def upload_document(
 @router.get("", response_model=DocumentsOut)
 def list_documents(user: CurrentUser, db: DbSession, q: str = "", limit: int = 50, offset: int = 0) -> DocumentsOut:
     query = select(Document).order_by(Document.created_at.desc())
+    if user.role != Role.ADMIN:
+        query = query.where(Document.created_by.in_(["system", user.id]))
     if q:
         query = query.where(Document.title.ilike(f"%{q}%"))
-    total = db.scalar(select(func.count()).select_from(Document)) or 0
+    count_query = select(func.count()).select_from(query.subquery())
+    total = db.scalar(count_query) or 0
     docs = db.scalars(query.limit(min(limit, 200)).offset(offset)).all()
     return DocumentsOut(items=[DocumentOut.model_validate(d) for d in docs], total=total)
 
@@ -101,7 +104,7 @@ def list_documents(user: CurrentUser, db: DbSession, q: str = "", limit: int = 5
 @router.get("/{doc_id}", response_model=DocumentOut)
 def get_document(doc_id: str, user: CurrentUser, db: DbSession) -> DocumentOut:
     doc = db.get(Document, doc_id)
-    if doc is None:
+    if doc is None or (user.role != Role.ADMIN and doc.created_by not in ("system", user.id)):
         raise NotFound("Document not found")
     return DocumentOut.model_validate(doc)
 
@@ -109,7 +112,7 @@ def get_document(doc_id: str, user: CurrentUser, db: DbSession) -> DocumentOut:
 @router.delete("/{doc_id}", status_code=204)
 def delete_document(doc_id: str, user: EngineerUser, db: DbSession) -> None:
     doc = db.get(Document, doc_id)
-    if doc is None:
+    if doc is None or (user.role != Role.ADMIN and doc.created_by not in (user.id,)):
         raise NotFound("Document not found")
     knowledge.get_vector_store().delete_document(doc_id)
     db.query(Chunk).filter(Chunk.document_id == doc_id).delete()
@@ -128,5 +131,5 @@ def search(payload: dict, user: CurrentUser, db: DbSession) -> SearchOut:
     question = str(payload.get("query", "")).strip()
     if not question:
         raise NotFound("query required")
-    citations = knowledge.retrieve(question, top_k=8)
+    citations = knowledge.retrieve(question, top_k=8, user_id=user.id)
     return SearchOut(query=question, chunks=[Citation.model_validate(c) for c in citations])

@@ -76,7 +76,7 @@ def footer(canvas, doc):
     canvas.saveState()
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(GREY)
-    canvas.drawString(20 * mm, 12 * mm, "AI Manufacturing Copilot - Project Report")
+    canvas.drawString(20 * mm, 12 * mm, "Mechanical Copilot - Project Report")
     canvas.drawRightString(A4[0] - 20 * mm, 12 * mm, f"Page {doc.page}")
     canvas.restoreState()
 
@@ -84,7 +84,7 @@ def footer(canvas, doc):
 story = []
 
 # ---------------- Title block ----------------
-story.append(p("AI Manufacturing Copilot", "title"))
+story.append(p("Mechanical Copilot", "title"))
 story.append(p("Project Report - Progress, Verification &amp; Improvement Roadmap", "subtitle"))
 story.append(p("25ARE471 Introduction to Generative AI | End-Semester Project | "
                "Generated %s" % datetime.date.today().strftime("%d %B %Y"), "subtitle"))

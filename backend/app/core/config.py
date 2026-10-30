@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]  # backend/
@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     log_level: str = "INFO"
     secret_key: str = Field(default="dev-secret-change-me", min_length=8)
+    admin_bootstrap_token: str = ""
     access_token_expire_min: int = 30
     refresh_token_expire_days: int = 7
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
@@ -36,18 +37,29 @@ class Settings(BaseSettings):
     max_upload_mb: int = 25
 
     # LLM
-    llm_provider: str = "fake"  # openai_compatible | fake
+    llm_provider: str = "fake"  # openai | openai_compatible | fake
     llm_base_url: str = "https://api.openai.com/v1"
-    llm_api_key: str = ""
-    llm_model: str = "gpt-4o-mini"
+    llm_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("LLM_API_KEY", "OPENAI_API_KEY"),
+    )
+    llm_model: str = "gpt-6-luna"
     llm_vision_model: str = ""
     llm_timeout_s: int = 120
     llm_temperature: float = 0.2
 
+    # Media generation (direct OpenAI Images API; independent of chat gateway)
+    image_api_key: str = ""
+    image_api_base_url: str = "https://api.openai.com/v1"
+    image_generation_model: str = "gpt-image-2.5-flare"
+
     # Embeddings
     embeddings_provider: str = "hashing"  # openai_compatible | hashing
     embeddings_base_url: str = "https://api.openai.com/v1"
-    embeddings_api_key: str = ""
+    embeddings_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("EMBEDDINGS_API_KEY", "OPENAI_API_KEY"),
+    )
     embeddings_model: str = "text-embedding-3-small"
     embeddings_dim: int = 256
     # Offline hashing fallback is calibrated (score rescaling, QA refusal band) at
@@ -80,6 +92,21 @@ class Settings(BaseSettings):
 
     # Security
     rate_limit_per_min: int = 120
+
+    @model_validator(mode="after")
+    def validate_production_settings(self) -> "Settings":
+        if self.is_prod:
+            if self.secret_key == "dev-secret-change-me" or len(self.secret_key) < 32:
+                raise ValueError("Production requires a random SECRET_KEY with at least 32 characters")
+            if len(self.admin_bootstrap_token) < 32:
+                raise ValueError("Production requires an ADMIN_BOOTSTRAP_TOKEN with at least 32 characters")
+            if not self.database_url.startswith(("postgresql://", "postgresql+")):
+                raise ValueError("Production requires PostgreSQL; SQLite is not suitable for public deployment")
+            if self.llm_provider == "fake" or not self.llm_api_key:
+                raise ValueError("Production requires a configured LLM_PROVIDER and LLM_API_KEY")
+            if self.embeddings_provider == "hashing" or not self.embeddings_api_key:
+                raise ValueError("Production requires a configured embeddings provider and API key")
+        return self
 
     @field_validator("log_level", "app_env")
     @classmethod

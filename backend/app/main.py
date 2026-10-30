@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from starlette.responses import Response
 
@@ -27,17 +26,16 @@ REQUEST_COUNT = Counter(
 )
 
 DESCRIPTION = """
-**AI Copilot for Manufacturing Process Planning & Quality Inspection**
+**Mechanical engineering copilot for design, automotive, autonomous systems, manufacturing, and thermal engineering.**
 
-Grounded GenAI copilot:
-- **Planning**: RAG-grounded process plans with deterministic rule validation and human approval.
-- **Inspection**: image quality gate + VLM defect analysis with evidence and confidence.
-- **Q&A**: knowledge-base-grounded answers with citations and refusal on low confidence.
-- **Traceability**: every output carries sources, validation status and an audit trail.
+- **Engineering Q&A**: broad model knowledge, with account-scoped plant documents and citations when relevant.
+- **Planning**: process plans validated by deterministic rules and a human approval workflow.
+- **Inspection**: image quality gates and vision analysis with evidence and confidence.
+- **Privacy**: user-created plans, inspections, chats, and documents stay scoped to their account.
 """
 
 app = FastAPI(
-    title="AI Manufacturing Copilot",
+    title="Mechanical Copilot",
     version=VERSION,
     description=DESCRIPTION,
     docs_url="/docs",
@@ -87,22 +85,9 @@ def startup() -> None:
 
 @app.get("/health", tags=["ops"])
 def health() -> dict:
-    return {
-        "status": "ok",
-        "version": VERSION,
-        "llm_provider": settings.llm_provider,
-        "embeddings_provider": settings.embeddings_provider,
-        "vector_store": settings.vector_store,
-        "database": engine.url.drivername,
-    }
+    return {"status": "ok", "version": VERSION}
 
 
 @app.get("/metrics", tags=["ops"])
 def metrics() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-
-# Serve stored images (thumbnails) for the UI in single-node mode.
-uploads_path = Path(settings.upload_dir).resolve()
-uploads_path.mkdir(parents=True, exist_ok=True)
-app.mount("/files", StaticFiles(directory=str(uploads_path)), name="files")

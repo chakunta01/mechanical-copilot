@@ -25,6 +25,15 @@ export interface Citation {
   snippet: string;
 }
 
+export interface QaAttachment {
+  id: string;
+  kind: "image" | "video";
+  mime_type: string;
+  url: string;
+  prompt: string;
+  created_at: string;
+}
+
 export interface PlanOperation {
   op_number: number;
   name: string;
@@ -89,8 +98,6 @@ export interface Defect {
 export interface Inspection {
   id: string;
   part_number: string;
-  image_path: string;
-  thumbnail_path: string;
   status: string;
   quality: {
     passed: boolean;
@@ -185,8 +192,8 @@ async function request<T>(method: string, path: string, body?: unknown, isForm =
 
 export const api = {
   // auth
-  register: (email: string, password: string, fullName: string) =>
-    request<TokenPair>("POST", "/auth/register", { email, password, full_name: fullName }),
+  register: (email: string, password: string, fullName: string, adminBootstrapToken = "") =>
+    request<TokenPair>("POST", "/auth/register", { email, password, full_name: fullName, admin_bootstrap_token: adminBootstrapToken }),
   login: (email: string, password: string) => request<TokenPair>("POST", "/auth/login", { email, password }),
   me: () => request<User>("GET", "/auth/me"),
 
@@ -250,6 +257,15 @@ export const api = {
   getInspection: (id: string) => request<Inspection>("GET", `/inspections/${id}`),
   setDisposition: (id: string, disposition: string, notes: string) =>
     request<Inspection>("POST", `/inspections/${id}/disposition`, { disposition, notes }),
+  inspectionImage: async (id: string) => {
+    const fetchImage = () => fetch(`${API}/inspections/${id}/image`, {
+      headers: token() ? { Authorization: `Bearer ${token()}` } : {},
+    });
+    let response = await fetchImage();
+    if (response.status === 401 && token() && await refreshTokens()) response = await fetchImage();
+    if (!response.ok) throw new Error("Could not load inspection image");
+    return URL.createObjectURL(await response.blob());
+  },
 
   // feedback / qa / dashboard
   sendFeedback: (payload: { target_type: string; target_id: string; rating: number; category: string; notes: string }) =>
@@ -268,6 +284,29 @@ export const api = {
       "/qa/ask",
       { question, thread_id: threadId },
     ),
+  qaGenerateImage: (prompt: string, threadId: string | null) =>
+    request<{ thread_id: string; answer: string; attachment: QaAttachment }>(
+      "POST",
+      "/qa/generate-image",
+      { prompt, thread_id: threadId },
+    ),
+  qaMediaObjectUrl: async (id: string) => {
+    const fetchMedia = () => fetch(`${API}/qa/media/${id}`, {
+      headers: token() ? { Authorization: `Bearer ${token()}` } : {},
+    });
+    let response = await fetchMedia();
+    if (response.status === 401 && token() && await refreshTokens()) response = await fetchMedia();
+    if (!response.ok) throw new Error("Could not load generated media");
+    return URL.createObjectURL(await response.blob());
+  },
+  qaThreads: () =>
+    request<{ items: {
+      id: string;
+      title: string;
+      created_at: string;
+      messages: { id: number; role: "user" | "assistant"; content: string; citations: Citation[]; confidence: number; created_at: string; attachments: QaAttachment[] }[];
+    }[] }>("GET", "/qa/threads"),
+  deleteQaThread: (id: string) => request<void>("DELETE", `/qa/threads/${encodeURIComponent(id)}`),
   dashboard: () =>
     request<{
       total_plans: number;

@@ -9,6 +9,7 @@ export function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [adminBootstrapToken, setAdminBootstrapToken] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -18,10 +19,13 @@ export function AuthPage() {
     setBusy(true);
     try {
       if (mode === "login") await login(email, password);
-      else await register(email, password, name);
+      else await register(email, password, name, adminBootstrapToken);
       nav("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      const message = err instanceof Error ? err.message : "Authentication failed";
+      setError(mode === "login" && message === "Invalid email or password"
+        ? "Email or password did not match. If this is your first visit, create an account below."
+        : message);
     } finally {
       setBusy(false);
     }
@@ -30,14 +34,20 @@ export function AuthPage() {
   return (
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={submit}>
-        <h1>⚙ MFG Copilot</h1>
-        <div className="sub">Process planning & quality inspection, grounded in your plant knowledge.</div>
+        <h1>⚙ Mechanical Copilot</h1>
+        <div className="sub">Mechanical engineering answers for design, vehicles, manufacturing, and thermal systems.</div>
         {error && <div className="error-box">{error}</div>}
         {mode === "register" && (
-          <label className="field">
-            <span>Full name</span>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Engineer" />
-          </label>
+          <>
+            <label className="field">
+              <span>Full name</span>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Engineer" />
+            </label>
+            <label className="field">
+              <span>Site admin setup token <small>(optional; leave blank for a standard account)</small></span>
+              <input type="password" autoComplete="off" value={adminBootstrapToken} onChange={(e) => setAdminBootstrapToken(e.target.value)} placeholder="Only for the site administrator" />
+            </label>
+          </>
         )}
         <label className="field">
           <span>Email</span>
@@ -61,7 +71,7 @@ export function AuthPage() {
           {mode === "login" ? (
             <>
               New here? <a href="#" onClick={(e) => { e.preventDefault(); setMode("register"); }}>Create an account</a>
-              <div className="muted mt">The first account created becomes the plant admin.</div>
+              <div className="muted mt">Create an account before signing in. Standard accounts do not need an admin setup token.</div>
             </>
           ) : (
             <>

@@ -179,6 +179,7 @@ def analyze_image(
         f"visual inspection acceptance criteria defects {part_number}",
         doc_types=["sop", "standard", "qa"],
         top_k=4,
+        user_id=owner_id,
     )
     context = "\n".join(f"[K{i}] {c['title']}: {c['snippet'][:200]}" for i, c in enumerate(citations, 1))
 
